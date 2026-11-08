@@ -3,10 +3,10 @@
 #   attacker and smooth (the two opposite driver models), each in
 #     residual mode (a base driver drives, the agent adds a correction) and
 #     pure mode     (the agent's three numbers ARE steering, throttle, brake; no help).
-# HOURS = time limit (default 9.5), RES = residual authority (default 0.35; 1.0 = full), MODES = which modes (default "residual pure").
+# HOURS = time limit (default: runpod/HOURS), RES = residual authority (default 0.35; 1.0 = full), MODES = which modes (default "residual pure").
 cd "$(dirname "$0")/.."
 source "${OCD_DIR:-/workspace/Open-Car-Dynamics}/install/local_setup.sh"
-HOURS="${HOURS:-9.5}"
+HOURS="${HOURS:-$(cat runpod/HOURS 2>/dev/null || echo 6.5)}"   # training length; runpod/HOURS is set so that the pod stays inside the budget
 RES="${RES:-0.35}"
 MODES="${MODES:-residual pure}"
 TAG="$(cat runpod/RUN_TAG 2>/dev/null || echo v1)"   # bump the tag whenever the base driver or the environment changes, so old checkpoints are not resumed
