@@ -26,7 +26,10 @@ done
 sleep 20
 tail -n +1 -F "${LOGS[@]}" &
 TAIL=$!
+( while true; do sleep 1800; echo "=== SUMMARY $(date -u +%H:%M) UTC"; python3 scripts/compare_runs.py --runs "$RUNS" 2>&1 | tail -70; done ) &
+SUMM=$!
 wait "${PIDS[@]}"
 sleep 5
-kill "$TAIL" 2>/dev/null
+kill "$TAIL" "$SUMM" 2>/dev/null
+python3 scripts/compare_runs.py --runs "$RUNS" 2>&1 | tee "$RUNS/summary.txt"
 echo "TRAINING FINISHED"
