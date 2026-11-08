@@ -20,7 +20,13 @@ LOGS=()
 for d in attacker smooth; do
   for m in $MODES; do
     name="${d}_${m}"
-    python3 scripts/train.py --driver "$d" --mode "$m" --backend ocd --out "$RUNS/$name" --max-hours "$HOURS" --threads 2 --res-steer "$RES" --res-pedal "$RES" > "$RUNS/$name.log" 2>&1 &
+    extra=""
+    if [ "$m" = "pure" ]; then
+      # the pure agents start from a copy of the base driver (the from-scratch version, folder *_pure, did not learn to finish a lap in 40 minutes) and are pulled towards it while it fades
+      name="${d}_pure_bc"
+      extra="--warm-start --learning-starts 0 --ent-init 0.05 --bc-weight ${BC_WEIGHT:-5} --bc-decay ${BC_DECAY:-400000}"
+    fi
+    python3 scripts/train.py --driver "$d" --mode "$m" --backend ocd --out "$RUNS/$name" --max-hours "$HOURS" --threads 2 --res-steer "$RES" --res-pedal "$RES" $extra > "$RUNS/$name.log" 2>&1 &
     PIDS+=($!)
     LOGS+=("$RUNS/$name.log")
     echo "started $name (pid $!)"

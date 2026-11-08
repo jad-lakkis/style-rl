@@ -24,14 +24,77 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.utils import polyak_update
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from style_rl.evaluate import compare_with_reference, run_lap  # noqa: E402
 from style_rl.style_env import STYLE_GOOD, STYLE_OK, StyleRacingEnv  # noqa: E402
+
+
+BASE_CMD = slice(20, 23)        # the base driver's suggested steering/throttle/brake inside the 27 observation numbers (style_env._observe)
+
+
+class BCSAC(SAC):
+    """SAC whose actor loss also pulls the action towards the base driver's command (the observation carries it), with a weight that fades linearly to zero over `bc_decay` steps.
+    The Q term is normalised by the mean |Q| (as in TD3+BC), so one weight works at every reward scale. Used by the pure agents after their warm start: without the pull, the first SAC
+    updates unlearn the copied behaviour; with it the policy can improve on the base driver step by step."""
+
+    def __init__(self, *args, bc_weight=5.0, bc_decay=400_000, **kwargs):
+        self.bc_weight, self.bc_decay = bc_weight, bc_decay
+        super().__init__(*args, **kwargs)
+
+    def train(self, gradient_steps, batch_size=64):
+        self.policy.set_training_mode(True)
+        optimizers = [self.actor.optimizer, self.critic.optimizer] + ([self.ent_coef_optimizer] if self.ent_coef_optimizer is not None else [])
+        self._update_learning_rate(optimizers)
+        w_bc = self.bc_weight * max(0.0, 1.0 - self.num_timesteps / self.bc_decay)
+        ent_coef_losses, ent_coefs, actor_losses, critic_losses, bc_losses = [], [], [], [], []
+        for gradient_step in range(gradient_steps):
+            data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
+            discounts = data.discounts if data.discounts is not None else self.gamma
+            actions_pi, log_prob = self.actor.action_log_prob(data.observations)
+            log_prob = log_prob.reshape(-1, 1)
+            ent_coef = torch.exp(self.log_ent_coef.detach())
+            ent_coef_loss = -(self.log_ent_coef * (log_prob + self.target_entropy).detach()).mean()
+            ent_coef_losses.append(ent_coef_loss.item())
+            ent_coefs.append(ent_coef.item())
+            self.ent_coef_optimizer.zero_grad()
+            ent_coef_loss.backward()
+            self.ent_coef_optimizer.step()
+            with torch.no_grad():
+                next_actions, next_log_prob = self.actor.action_log_prob(data.next_observations)
+                next_q = torch.cat(self.critic_target(data.next_observations, next_actions), dim=1).min(dim=1, keepdim=True)[0] - ent_coef * next_log_prob.reshape(-1, 1)
+                target_q = data.rewards + (1 - data.dones) * discounts * next_q
+            critic_loss = 0.5 * sum(F.mse_loss(q, target_q) for q in self.critic(data.observations, data.actions))
+            critic_losses.append(critic_loss.item())
+            self.critic.optimizer.zero_grad()
+            critic_loss.backward()
+            self.critic.optimizer.step()
+            min_q_pi = torch.cat(self.critic(data.observations, actions_pi), dim=1).min(dim=1, keepdim=True)[0]
+            rl_loss = (ent_coef * log_prob - min_q_pi).mean()
+            bc_loss = F.mse_loss(actions_pi, data.observations[:, BASE_CMD])
+            actor_loss = rl_loss / (min_q_pi.abs().mean().detach() + 1e-6) + w_bc * bc_loss if w_bc > 0 else rl_loss
+            actor_losses.append(actor_loss.item())
+            bc_losses.append(bc_loss.item())
+            self.actor.optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor.optimizer.step()
+            if gradient_step % self.target_update_interval == 0:
+                polyak_update(self.critic.parameters(), self.critic_target.parameters(), self.tau)
+                polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
+        self._n_updates += gradient_steps
+        self.logger.record("train/n_updates", self._n_updates, exclude="tensorboard")
+        self.logger.record("train/ent_coef", np.mean(ent_coefs))
+        self.logger.record("train/actor_loss", np.mean(actor_losses))
+        self.logger.record("train/critic_loss", np.mean(critic_losses))
+        self.logger.record("train/ent_coef_loss", np.mean(ent_coef_losses))
+        self.logger.record("train/bc_loss", np.mean(bc_losses))
+        self.logger.record("train/bc_weight", w_bc)
 
 
 class Periodic(BaseCallback):
@@ -137,6 +200,63 @@ class Periodic(BaseCallback):
         return (time.time() - self.t0) < self.args.max_hours * 3600
 
 
+def warm_start(model, kw, args, n_steps=40_000, bc_steps=4000, critic_steps=3000):
+    """Pure mode only: instead of random actions, start from a policy that copies the base driver.
+    1. the base driver drives the training environment (with action noise in most episodes, so that the data also covers states off the perfect line); every step goes into the replay buffer,
+    2. the actor is trained by supervised learning to output the base driver's three commands at the visited states,
+    3. the critics are trained alone on that data for a while (the actor is fixed), so that the first SAC updates do not destroy the copied behaviour.
+    The agent still outputs only steering, throttle and brake."""
+    env = StyleRacingEnv(episode_steps=args.episode_steps, full_lap=False, seed=args.seed + 1, **kw)
+    rng = np.random.default_rng(args.seed + 1)
+    obs, _ = env.reset(seed=args.seed + 1)
+    sigma = float(rng.choice([0.0, 0.05, 0.1, 0.2]))
+    O, A = [], []
+    t0 = time.time()
+    for t in range(n_steps):
+        bs, bt, bb, _ = env._base                                  # the base driver's command at the current observation
+        target = np.array([bs, bt, bb], np.float32)
+        a = np.clip(target + sigma * rng.standard_normal(3), -1.0, 1.0).astype(np.float32)
+        nobs, r, term, trunc, info = env.step(a)
+        model.replay_buffer.add(obs[None], nobs[None], a[None], np.array([r], np.float32), np.array([float(term or trunc)], np.float32), [{"TimeLimit.truncated": bool(trunc and not term)}])
+        O.append(obs)
+        A.append(target)
+        obs = nobs
+        if term or trunc:
+            obs, _ = env.reset()
+            sigma = float(rng.choice([0.0, 0.05, 0.1, 0.2]))
+    print(f"warm start: {n_steps} base-driver steps collected in {time.time() - t0:.0f} s", flush=True)
+    dev = model.device
+    O, A = torch.as_tensor(np.array(O), device=dev), torch.as_tensor(np.array(A), device=dev).clamp(-0.98, 0.98)
+    opt = torch.optim.Adam(model.actor.parameters(), lr=1e-3)
+    for i in range(bc_steps):
+        idx = torch.randint(0, len(O), (512,), device=dev)
+        mean_actions, _, _ = model.actor.get_action_dist_params(O[idx])
+        loss = F.mse_loss(torch.tanh(mean_actions), A[idx])
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        if i % 1000 == 0 or i == bc_steps - 1:
+            print(f"warm start: behaviour cloning step {i}, mean squared error {loss.item():.5f}", flush=True)
+    with torch.no_grad():                                            # little exploration noise to begin with
+        model.actor.log_std.bias.fill_(-2.0)
+        model.actor.log_std.weight.mul_(0.1)
+    ent = torch.exp(model.log_ent_coef.detach())
+    for i in range(critic_steps):
+        data = model.replay_buffer.sample(256)
+        with torch.no_grad():
+            na, nlp = model.actor.action_log_prob(data.next_observations)
+            nq = torch.cat(model.critic_target(data.next_observations, na), dim=1).min(dim=1, keepdim=True)[0] - ent * nlp.reshape(-1, 1)
+            tq = data.rewards + (1 - data.dones) * model.gamma * nq
+        loss = 0.5 * sum(F.mse_loss(q, tq) for q in model.critic(data.observations, data.actions))
+        model.critic.optimizer.zero_grad()
+        loss.backward()
+        model.critic.optimizer.step()
+        if i % 2 == 0:
+            polyak_update(model.critic.parameters(), model.critic_target.parameters(), model.tau)
+        if i % 1000 == 0 or i == critic_steps - 1:
+            print(f"warm start: critic step {i}, loss {loss.item():.3f}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--driver", choices=["attacker", "smooth"], required=True)
@@ -161,6 +281,10 @@ def main():
     ap.add_argument("--save-every", type=int, default=10_000)
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--warm-start", action="store_true", help="pure mode: start from a policy that copies the base driver (behaviour cloning + critic warm-up) instead of random actions")
+    ap.add_argument("--bc-weight", type=float, default=0.0, help="weight of the pull towards the base driver's command in the actor loss (0 = plain SAC); fades to 0 over --bc-decay steps")
+    ap.add_argument("--bc-decay", type=int, default=400_000)
+    ap.add_argument("--ent-init", type=float, default=0.0, help="initial entropy coefficient (0 = SB3 default 1.0); a warm-started policy needs a small one")
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
@@ -174,12 +298,14 @@ def main():
     latest = args.out / "latest.zip"
     if latest.is_file():
         print("resuming from", latest, flush=True)
-        model = SAC.load(str(latest), env=env, device=device)
+        model = (BCSAC if args.bc_weight > 0 else SAC).load(str(latest), env=env, device=device)
         if (args.out / "latest_buffer.pkl").is_file():
             model.load_replay_buffer(str(args.out / "latest_buffer"))
     else:
-        model = SAC("MlpPolicy", env, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=args.learning_starts, batch_size=args.batch_size, tau=0.005, gamma=args.gamma,
-                    train_freq=args.train_freq, gradient_steps=1, ent_coef="auto", policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
+        algo = BCSAC if args.bc_weight > 0 else SAC
+        extra = dict(bc_weight=args.bc_weight, bc_decay=args.bc_decay) if args.bc_weight > 0 else {}
+        model = algo("MlpPolicy", env, **extra, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=args.learning_starts, batch_size=args.batch_size, tau=0.005, gamma=args.gamma,
+                    train_freq=args.train_freq, gradient_steps=1, ent_coef=(f"auto_{args.ent_init}" if args.ent_init > 0 else "auto"), policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
     formats = ["csv", "stdout"]
     try:
         import tensorboard  # noqa: F401
@@ -195,7 +321,12 @@ def main():
     (args.out / "system.txt").write_text(f"commit {commit}" + chr(10) + f"disk: {du.total / 1e9:.1f} GB total, {du.free / 1e9:.1f} GB free at the start" + chr(10) + f"device {device}, torch {torch.__version__}" + chr(10))
     n_par = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
     print(f"{args.driver} ({args.mode}, {args.backend}): reference lap {eval_env.ref.lap_time:.1f} s; network {args.hidden}x{args.hidden}, {n_par:,} parameters (actor + 2 critics + 2 target critics), device {device}, one update per {args.train_freq} step(s)", flush=True)
-    res, df0, _ = run_lap(eval_env, None)
+    base_env = eval_env if args.mode == "residual" else StyleRacingEnv(full_lap=True, **{**kw, "mode": "residual"})   # the original driver: the base driver alone (for a pure agent, which has no base driver, a separate residual-mode environment)
+    res, df0, _ = run_lap(base_env, None)
+    if args.warm_start and args.mode == "pure" and not latest.is_file():
+        warm_start(model, kw, args)
+        ws, _, wc = run_lap(eval_env, model)
+        print(f"after the warm start (before any SAC update): {ws['end']}, lap {ws['lap_time']:.1f} s, style error {ws['style_error']:.2f}, off-track {100 * ws['off_track_share']:.1f}%", flush=True)
     print(f"base driver alone (zero residual): {res['end']}, lap {res['lap_time']:.1f} s, style error {res['style_error']:.2f}, off-track {100 * res['off_track_share']:.1f}%", flush=True)
     (args.out / "laps").mkdir(exist_ok=True)
     df0.to_csv(args.out / "laps" / "base_driver.csv", index=False)
