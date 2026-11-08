@@ -17,6 +17,8 @@ echo "=== SETUP ($(date -u +%H:%M:%S) UTC)"
 bash runpod/setup_pod.sh 2>&1 | tee /workspace/setup.log
 if ! grep -q "setup done" /workspace/setup.log; then echo "SETUP FAILED: see /workspace/setup.log"; tail -40 /workspace/setup.log; sleep 60; exit 1; fi
 source /workspace/Open-Car-Dynamics/install/local_setup.sh
+echo "=== MEASURE THE CAR ($(date -u +%H:%M:%S) UTC)"
+python3 scripts/measure_ocd_envelope.py --out /workspace/ocd_envelope.json 2>&1 | grep -v -E "^(=== OCD|Parameter file|Mass parameter|Wheelbase|Lift coefficient|Drive calibration|Brake calibration|Maximum steering)" | tee /workspace/envelope.log
 echo "=== DIAGNOSE ($(date -u +%H:%M:%S) UTC)"
 python3 scripts/diagnose_ocd.py 2>&1 | grep -v -E "^(=== OCD|Parameter file|Mass parameter|Wheelbase|Lift coefficient|Drive calibration|Brake calibration|Maximum steering)" | tee /workspace/diagnose.log
 if [ -f runpod/HOLD ]; then echo "HOLD: runpod/HOLD exists in the repository, not training. Waiting for a new commit and a pod restart."; sleep 7200; exit 0; fi
