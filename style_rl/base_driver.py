@@ -7,8 +7,9 @@ import numpy as np
 
 
 class BaseDriver:
-    def __init__(self, ref, wheelbase=2.8, max_steering_rad=0.15, kp_thr=0.18, kp_brk=0.30, preview_s=0.35, look0=3.0, look_gain=0.3, band=1.0, steer_sign=1.0):
+    def __init__(self, ref, wheelbase=2.8, max_steering_rad=0.15, kp_thr=0.18, kp_brk=0.30, preview_s=0.35, look0=3.0, look_gain=0.3, band=1.0, steer_sign=1.0, gov=0.0, gov_start=0.35, thr_min=0.15):
         self.r, self.wb, self.dmax, self.sign = ref, wheelbase, max_steering_rad, float(steer_sign)
+        self.gov, self.gov_start, self.thr_min = gov, gov_start, thr_min   # traction governor: the throttle is capped when the steering is large (full throttle at full lock spins the rear)
         self.kp_thr, self.kp_brk, self.preview, self.look0, self.look_gain, self.band = kp_thr, kp_brk, preview_s, look0, look_gain, band
 
     def control(self, obs):
@@ -34,4 +35,6 @@ class BaseDriver:
             throttle, brake = float(np.clip(core, 0.0, 1.0)), 0.0
             if e < -3.0:
                 throttle, brake = 0.0, float(np.clip(self.kp_brk * (-e - 3.0), 0.0, 1.0))
+        if self.gov > 0.0:
+            throttle = min(throttle, float(np.clip(1.0 - self.gov * max(0.0, abs(steering) - self.gov_start), self.thr_min, 1.0)))
         return steering, throttle, brake, float(v_t)

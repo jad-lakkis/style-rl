@@ -114,12 +114,12 @@ def main():
         print("F. variants of the reference laps (safety margin on the measured limits), base driver alone", flush=True)
         for tdir in [Path(__file__).resolve().parents[1] / "targets"] + variants:
             os.environ["STYLE_TARGETS"] = str(tdir)
-            for driver in ("attacker", "smooth"):
+            for driver, govs in (("attacker", ((0.0, 0.35), (1.2, 0.35), (2.0, 0.35), (3.0, 0.2), (4.0, 0.1))), ("smooth", ((0.0, 0.35), (2.0, 0.35)))):
                 env = StyleRacingEnv(driver=driver, backend=be, full_lap=True)
-                for look0, gain in ((3.0, 0.3), (6.0, 0.4)):
-                    res, df = lap(env, on_line=True, steer_sign=1.0, look0=look0, look_gain=gain)
-                    print(f"  {tdir.name:6s} {driver:8s} look {look0:.0f}+{gain}v: {res['end']}, distance {res['distance_m']:.0f} m, lap {res['lap_time']:.1f} s (reference {env.ref.lap_time:.1f}), "
-                          f"off-track {100 * res['off_track_share']:.1f}%, style error {res['style_error']:.2f}", flush=True)
+                for gov, gstart in govs:
+                    res, df = lap(env, on_line=True, steer_sign=1.0, look0=3.0, look_gain=0.3, gov=gov, gov_start=gstart)
+                    print(f"  {tdir.name:7s} {driver:8s} traction governor {gov} from steering {gstart}: {res['end']}, distance {res['distance_m']:.0f} m, lap {res['lap_time']:.1f} s (reference {env.ref.lap_time:.1f}), "
+                          f"off-track {100 * res['off_track_share']:.1f}%, max |lateral| {df.lateral.abs().max():.1f} m, style error {res['style_error']:.2f}", flush=True)
         os.environ.pop("STYLE_TARGETS", None)
     raw2 = make_backend(be)
     capability(raw2, StyleRacingEnv(driver="attacker", backend=be, full_lap=True).ref)
