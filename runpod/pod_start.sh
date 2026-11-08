@@ -15,7 +15,7 @@ if [ -f /workspace/DONE ]; then echo "already finished earlier (see /workspace/r
 cd style-rl && git pull --ff-only || true
 echo "=== POD: id ${RUNPOD_POD_ID:-unknown}; RunPod variables present: $(env | grep -o '^RUNPOD[A-Z_]*' | tr '\n' ' ')"
 if [ -n "${RUNPOD_POD_ID:-}" ] && [ -n "${RUNPOD_API_KEY:-}" ]; then
-  curl -s -o /dev/null -w "API check (read this pod): HTTP %{http_code}\n" "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID" -H "Authorization: Bearer $RUNPOD_API_KEY" || true
+  curl -s -o /dev/null -w "API check (read this pod): HTTP %{http_code}\n" "https://api.runpod.io/v2/pods/$RUNPOD_POD_ID" -H "Authorization: Bearer $RUNPOD_API_KEY" || true
 fi
 echo "=== SETUP ($(date -u +%H:%M:%S) UTC)"
 bash runpod/setup_pod.sh 2>&1 | tee /workspace/setup.log
