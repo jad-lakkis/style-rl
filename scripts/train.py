@@ -287,6 +287,7 @@ def main():
     ap.add_argument("--warm-start", action="store_true", help="pure mode: start from a policy that copies the base driver (behaviour cloning + critic warm-up) instead of random actions")
     ap.add_argument("--bc-weight", type=float, default=0.0, help="weight of the pull towards the base driver's command in the actor loss (0 = plain SAC); fades to 0 over --bc-decay steps")
     ap.add_argument("--bc-decay", type=int, default=400_000)
+    ap.add_argument("--prog-weight", type=float, default=0.0, help="reward per metre of progress (0 = default 0.02); a larger value makes lap time matter more against the style and smoothness terms")
     ap.add_argument("--ent-max", type=float, default=0.1, help="upper limit of the entropy coefficient (BC-anchored SAC only)")
     ap.add_argument("--ent-init", type=float, default=0.0, help="initial entropy coefficient (0 = SB3 default 1.0); a warm-started policy needs a small one")
     args = ap.parse_args()
@@ -297,6 +298,8 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "args.json").write_text(json.dumps({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=1))
     kw = dict(driver=args.driver, backend=args.backend, mode=args.mode, res_steer=args.res_steer, res_pedal=args.res_pedal)
+    if args.prog_weight > 0:
+        kw["weights"] = {"prog": args.prog_weight}
     env = Monitor(StyleRacingEnv(episode_steps=args.episode_steps, full_lap=False, seed=args.seed, **kw))
     eval_env = StyleRacingEnv(full_lap=True, **kw)
     latest = args.out / "latest.zip"

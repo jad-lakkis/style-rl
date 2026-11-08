@@ -18,8 +18,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", type=Path, required=True)
     ap.add_argument("--plot", action="store_true")
+    ap.add_argument("--only", default="", help="regular expression: only agent folders whose name matches")
     args = ap.parse_args()
-    dirs = sorted(p for p in args.runs.iterdir() if (p / "eval.csv").is_file())
+    import re
+    dirs = sorted(p for p in args.runs.iterdir() if (p / "eval.csv").is_file() and re.search(args.only, p.name))
     if not dirs:
         print("no evaluations yet in", args.runs)
         return
