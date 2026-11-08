@@ -2,6 +2,7 @@
 # Run once on a RunPod pod that uses the Docker image ros:humble (Ubuntu 22.04 with ROS 2). Builds Open-Car-Dynamics and installs the Python packages. Safe to run again.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # absolute, because the build below changes directory
 OCD_DIR="${OCD_DIR:-/workspace/Open-Car-Dynamics}"
 if [ ! -f "$OCD_DIR/install/local_setup.sh" ]; then
   apt-get update
@@ -25,5 +26,5 @@ else
   pip3 install --no-cache-dir "numpy<2" torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
 fi
 python3 -c "import torch; print('torch', torch.__version__, 'cuda available:', torch.cuda.is_available())"
-pip3 install --no-cache-dir -r "$(dirname "$0")/../requirements.txt"
+pip3 install --no-cache-dir -r "$HERE/../requirements.txt"
 echo "setup done"

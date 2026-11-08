@@ -238,7 +238,8 @@ class OCDMonzaEnv:
     # RESET
     # ==============================================
 
-    def reset(self, start_idx=100, speed=0.0):
+    def reset(self, start_idx=100, speed=0.0, pose=None):
+        """pose = (x, y, heading_rad) puts the car there instead of on the centre line at start_idx."""
 
         if not np.isfinite(speed) or speed < 0:
             raise ValueError(
@@ -250,6 +251,9 @@ class OCDMonzaEnv:
         heading = self.track.query(
             x, y
         )["heading_rad"]
+
+        if pose is not None:
+            x, y, heading = pose
 
         p = self.params.copy()
 

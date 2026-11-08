@@ -38,11 +38,12 @@ def wrap(a):
 class StyleRacingEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, driver="attacker", backend="mock", mode="residual", episode_steps=700, full_lap=False, res_steer=0.35, res_pedal=0.35, weights=None, seed=0):
+    def __init__(self, driver="attacker", backend="mock", mode="residual", episode_steps=700, full_lap=False, res_steer=0.35, res_pedal=0.35, weights=None, seed=0, start_on_line=True):
         super().__init__()
         self.ref = Reference(driver)
         self.env = make_backend(backend)
         self.mode, self.full_lap, self.episode_steps = mode, full_lap, int(episode_steps)
+        self.start_on_line = start_on_line   # start on the reference line with its heading (not on the centre line, which can be several metres away at 200+ km/h)
         self.res_steer, self.res_pedal = res_steer, res_pedal
         self.w = {**DEFAULT_W, **(weights or {})}
         self.base = BaseDriver(self.ref, max_steering_rad=self.env.max_steering_rad)
@@ -107,7 +108,9 @@ class StyleRacingEnv(gym.Env):
         p0 = 0.0 if self.full_lap else float(self.rng.uniform(0, self.L))
         v0 = float(self.ref.at(self.ref.v, p0)) * (1.0 if self.full_lap else float(self.rng.uniform(0.85, 1.0)))
         n_pts = len(self.env.track.center)
-        o = self.env.reset(start_idx=int(p0 / (self.L / n_pts)) % n_pts, speed=v0)
+        r = self.ref
+        pose = (float(r.at(r.xy[:, 0], p0)), float(r.at(r.xy[:, 1], p0)), float(r.at_angle(r.heading, p0))) if self.start_on_line else None
+        o = self.env.reset(start_idx=int(p0 / (self.L / n_pts)) % n_pts, speed=v0, pose=pose)
         self.o = o
         self.prog_unw = self.start = float(o["progress_m"])
         self.last_p, self.t0 = self.prog_unw, float(o["time_s"])

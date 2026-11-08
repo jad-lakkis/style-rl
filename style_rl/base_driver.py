@@ -7,8 +7,8 @@ import numpy as np
 
 
 class BaseDriver:
-    def __init__(self, ref, wheelbase=2.8, max_steering_rad=0.15, kp_thr=0.18, kp_brk=0.30, preview_s=0.35, look0=3.0, look_gain=0.3, band=1.0):
-        self.r, self.wb, self.dmax = ref, wheelbase, max_steering_rad
+    def __init__(self, ref, wheelbase=2.8, max_steering_rad=0.15, kp_thr=0.18, kp_brk=0.30, preview_s=0.35, look0=3.0, look_gain=0.3, band=1.0, steer_sign=1.0):
+        self.r, self.wb, self.dmax, self.sign = ref, wheelbase, max_steering_rad, float(steer_sign)
         self.kp_thr, self.kp_brk, self.preview, self.look0, self.look_gain, self.band = kp_thr, kp_brk, preview_s, look0, look_gain, band
 
     def control(self, obs):
@@ -20,7 +20,7 @@ class BaseDriver:
         alpha = np.arctan2(dy, dx) - obs["yaw"]
         alpha = np.arctan2(np.sin(alpha), np.cos(alpha))
         delta = np.arctan2(2.0 * self.wb * np.sin(alpha), max(np.hypot(dx, dy), 1.0))
-        steering = float(np.clip(delta, -self.dmax, self.dmax) / self.dmax)
+        steering = self.sign * float(np.clip(delta, -self.dmax, self.dmax) / self.dmax)
 
         v_t = r.at(r.v, prog + v * self.preview)
         ff_thr, ff_brk = r.at(r.thr, prog), r.at(r.brk, prog)

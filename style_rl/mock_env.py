@@ -19,9 +19,11 @@ class MockOCDEnv:
         self.time = 0.0
         self.x = self.y = self.yaw = self.v = self.yaw_rate = 0.0
 
-    def reset(self, start_idx=100, speed=0.0):
+    def reset(self, start_idx=100, speed=0.0, pose=None):
         self.x, self.y = (float(a) for a in self.track.center[start_idx])
         self.yaw = float(self.track.query(self.x, self.y)["heading_rad"])
+        if pose is not None:
+            self.x, self.y, self.yaw = (float(a) for a in pose)
         self.v, self.yaw_rate, self.time = float(speed), 0.0, 0.0
         return self.observe()
 
