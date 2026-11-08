@@ -1,0 +1,30 @@
+{
+ "attacker": {
+  "knobs": {
+   "brake_intensity": 0.9,
+   "trail_release": -0.8,
+   "throttle_pickup": 0.9,
+   "steer_activity": 0.7,
+   "apex_timing": 0.5,
+   "width_use": 0.8,
+   "rotation": 0.9
+  },
+  "skill": 0.6,
+  "lap_time_f317_model_s": 104.56000000000515,
+  "description": "Aggressive: brakes late and hard, releases the brake abruptly, early abrupt throttle, busy hands, oversteer-prone"
+ },
+ "smooth": {
+  "knobs": {
+   "brake_intensity": -0.9,
+   "trail_release": 0.8,
+   "throttle_pickup": -0.8,
+   "steer_activity": -0.8,
+   "apex_timing": -0.5,
+   "width_use": -0.2,
+   "rotation": -0.9
+  },
+  "skill": 1.0,
+  "lap_time_f317_model_s": 105.80000000000534,
+  "description": "Smooth momentum driver: brakes early and gently, progressive release, patient throttle, calm hands, understeer-prone"
+ }
+}

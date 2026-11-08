@@ -1,0 +1,5 @@
+numpy<2
+pandas
+scipy
+gymnasium
+stable-baselines3
