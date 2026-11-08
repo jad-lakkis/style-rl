@@ -9,10 +9,14 @@ if [ ! -f "$OCD_DIR/install/local_setup.sh" ]; then
       ros-${ROS_DISTRO}-can-msgs ros-${ROS_DISTRO}-ros2-socketcan ros-${ROS_DISTRO}-geographic-msgs
   [ -d "$OCD_DIR" ] || git clone --recursive https://github.com/TUMFTM/Open-Car-Dynamics.git "$OCD_DIR"
   cd "$OCD_DIR"
+  set +u   # the ROS setup scripts read variables that are not set
   source /opt/ros/${ROS_DISTRO}/setup.bash
+  set -u
   colcon build --merge-install --packages-up-to ocd_vehicle_models_py --cmake-args -DCMAKE_BUILD_TYPE=Release
 fi
+set +u
 source "$OCD_DIR/install/local_setup.sh"
+set -u
 python3 -c "import ocd_vehicle_models_py; print('OCD python bindings import OK')"
 if [ -e /dev/nvidiactl ]; then
   echo "GPU found: installing the CUDA build of torch"
