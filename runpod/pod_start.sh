@@ -6,13 +6,8 @@ set -o pipefail   # no -u: the ROS/OCD setup scripts read unset variables
 mkdir -p /workspace && cd /workspace
 
 stop_pod() {
-  echo "stopping this pod ($(date -u +%H:%M:%S) UTC)"
-  if [ -n "${RUNPOD_POD_ID:-}" ] && [ -n "${RUNPOD_API_KEY:-}" ]; then
-    curl -s -o /dev/null -w "stop request: HTTP %{http_code}\n" -X POST "https://rest.runpod.io/v1/pods/$RUNPOD_POD_ID/stop" -H "Authorization: Bearer $RUNPOD_API_KEY" || true
-  else
-    echo "no RUNPOD_POD_ID / RUNPOD_API_KEY in this container: the pod has to be stopped from outside"
-  fi
-  sleep 600
+  bash /workspace/style-rl/runpod/stop_pod.sh   # a script of the repository, so it can be fixed without restarting the pod
+  sleep 600                                      # if the pod is still running after that, wait here (RunPod restarts this command when it ends)
 }
 
 if [ -f /workspace/DONE ]; then echo "already finished earlier (see /workspace/runs)"; stop_pod; exit 0; fi
