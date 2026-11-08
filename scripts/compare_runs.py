@@ -32,6 +32,11 @@ def main():
     for k, d in enumerate(dirs):
         ev = pd.read_csv(d / "eval.csv")
         base = json.loads((d / "baseline.json").read_text()) if (d / "baseline.json").is_file() else {}
+        if d.name.endswith("_pure"):          # a pure agent has no base driver: its original driver is the base driver of the residual run with the same driver model
+            sib = d.parent / (d.name[: -len("_pure")] + "_residual") / "baseline.json"
+            if sib.is_file():
+                base = json.loads(sib.read_text())
+                ev = ev.assign(base_lap_time=base.get("lap_time"), delta_vs_base=ev.lap_time - (base.get("lap_time") or np.nan))
         ref_t = float(ev.reference_lap_time.iloc[0])
         b_t, b_e = base.get("lap_time"), base.get("style_error")
         done = ev[ev.completed]
