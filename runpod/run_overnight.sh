@@ -6,12 +6,15 @@
 # HOURS = time limit (default: runpod/HOURS), RES = residual authority (default 0.35; 1.0 = full), MODES = which modes (default "residual pure").
 cd "$(dirname "$0")/.."
 source "${OCD_DIR:-/workspace/Open-Car-Dynamics}/install/local_setup.sh"
+pip3 install -q -r requirements.txt 2>&1 | tail -1   # picks up packages added after the pod was set up (tensorboard)
 HOURS="${HOURS:-$(cat runpod/HOURS 2>/dev/null || echo 6.5)}"   # training length; runpod/HOURS is set so that the pod stays inside the budget
 RES="${RES:-0.35}"
 MODES="${MODES:-residual pure}"
 TAG="$(cat runpod/RUN_TAG 2>/dev/null || echo v1)"   # bump the tag whenever the base driver or the environment changes, so old checkpoints are not resumed
 RUNS="/workspace/runs/$TAG"
 mkdir -p "$RUNS"
+# watchdog: whatever happens, the pod is stopped 45 minutes after the planned end (the budget), and the DONE marker prevents a restart from training again
+( sleep "$(python3 -c "print(int(($HOURS + 0.75) * 3600))")"; echo "WATCHDOG: time is up, stopping the pod"; touch /workspace/DONE; bash runpod/stop_pod.sh ) &
 PIDS=()
 LOGS=()
 for d in attacker smooth; do
@@ -32,4 +35,6 @@ wait "${PIDS[@]}"
 sleep 5
 kill "$TAIL" "$SUMM" 2>/dev/null
 python3 scripts/compare_runs.py --runs "$RUNS" 2>&1 | tee "$RUNS/summary.txt"
+touch /workspace/DONE
+bash runpod/stop_pod.sh
 echo "TRAINING FINISHED"

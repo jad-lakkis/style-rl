@@ -79,7 +79,29 @@ def trace(env, kw, start_m=600.0):
               f"steer {r.steer:+.2f}, throttle {r.throttle:.2f}, brake {r.brake:.2f}", flush=True)
 
 
+def resources():
+    import shutil
+    import subprocess
+    if not Path("/workspace").is_dir():
+        return
+    t, u, f = shutil.disk_usage("/workspace")
+    print(f"  DISK /workspace: {t / 1e9:.1f} GB total, {u / 1e9:.1f} GB used, {f / 1e9:.1f} GB free", flush=True)
+    for p in ("/workspace/Open-Car-Dynamics", "/workspace/pip-cache", "/workspace/style-rl", "/workspace/runs"):
+        if Path(p).exists():
+            out = subprocess.run(["du", "-sh", p], capture_output=True, text=True).stdout.split()
+            print(f"    {p}: {out[0] if out else '?'}", flush=True)
+    try:
+        mem = {l.split(":")[0]: int(l.split()[1]) for l in open("/proc/meminfo")}
+        print(f"  RAM: {mem['MemTotal'] / 1e6:.0f} GB total, {mem['MemAvailable'] / 1e6:.0f} GB available", flush=True)
+    except Exception:
+        pass
+
+
 def main():
+    resources()
+    if not (Path(__file__).resolve().parents[1] / "runpod" / "HOLD").exists():
+        print("no HOLD file: the long diagnostic is skipped (the smoke test follows)", flush=True)
+        return
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", choices=["ocd", "mock"], default="ocd")
     be = ap.parse_args().backend

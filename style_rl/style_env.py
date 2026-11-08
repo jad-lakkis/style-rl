@@ -19,6 +19,10 @@ from style_rl.reference import Reference
 from style_rl.style import POST, PRE, corner_features, style_error
 
 ROOT = Path(__file__).resolve().parents[1]
+COMPONENTS = ("progress", "line", "jerk", "slow", "off_track", "stall", "style", "lap")
+STYLE_OK, STYLE_GOOD = 2.0, 1.0            # a corner counts as matched when its style error is below these
+# settings of the base driver found in the real OCD simulator (scripts/diagnose_ocd.py): the aggressive driver's line needs a traction governor, otherwise the car spins at the exit of the first chicane
+BASE_KW = {"attacker": dict(gov=3.0, gov_start=0.2), "smooth": {}}
 DEFAULT_W = dict(prog=0.02, off=5.0, off_end=20.0, line=0.01, act=0.05, slow=0.01, style=1.5, lap=50.0, time=5.0, stall=10.0)
 
 
@@ -46,7 +50,7 @@ class StyleRacingEnv(gym.Env):
         self.start_on_line = start_on_line   # start on the reference line with its heading (not on the centre line, which can be several metres away at 200+ km/h)
         self.res_steer, self.res_pedal = res_steer, res_pedal
         self.w = {**DEFAULT_W, **(weights or {})}
-        self.base = BaseDriver(self.ref, max_steering_rad=self.env.max_steering_rad)
+        self.base = BaseDriver(self.ref, max_steering_rad=self.env.max_steering_rad, **BASE_KW.get(driver, {}))
         self.dt = float(self.env.control_dt)
         self.L = float(self.ref.length)
         self.rng = np.random.default_rng(seed)
@@ -118,6 +122,7 @@ class StyleRacingEnv(gym.Env):
         self.steps, self.off_steps, self.stall_steps = 0, 0, 0
         self.log_p, self.log_b, self.log_t, self.log_s, self.log_v = [], [], [], [], []
         self.done_corners, self.style_errors, self.corner_log = set(), [], []
+        self.ep = {"inside": 0, "speed": 0.0, "elat2": 0.0, "comp": dict.fromkeys(COMPONENTS, 0.0)}
         return self._observe(o), {}
 
     def step(self, action):
@@ -139,33 +144,47 @@ class StyleRacingEnv(gym.Env):
         self.log_t.append(thr)
         self.log_s.append(steer)
         self.log_v.append(o["speed"])
-        w, r = self.w, 0.0
-        r += w["prog"] * d
+        w = self.w
+        c = dict.fromkeys(COMPONENTS, 0.0)
+        c["progress"] = w["prog"] * d
         e_lat = o["lateral_m"] - self.ref.at(self.ref.n, o["progress_m"])
-        r -= w["line"] * min(e_lat ** 2, 25.0)
-        r -= w["act"] * float(np.abs(self.last - prev).sum())
+        c["line"] = -w["line"] * min(e_lat ** 2, 25.0)
+        c["jerk"] = -w["act"] * float(np.abs(self.last - prev).sum())
         v_ref = self.ref.at(self.ref.v, o["progress_m"])
-        r -= w["slow"] * max(0.0, v_ref - 3.0 - o["speed"])
+        c["slow"] = -w["slow"] * max(0.0, v_ref - 3.0 - o["speed"])
         terminated, truncated, info = False, False, {}
         if not o["inside_track"]:
-            r -= w["off"]
+            c["off_track"] -= w["off"]
             self.off_steps += 1
             if self.off_steps * self.dt > 1.0:
-                r -= w["off_end"]
+                c["off_track"] -= w["off_end"]
                 terminated, info["end"] = True, "off_track"
         else:
             self.off_steps = 0
         self.stall_steps = self.stall_steps + 1 if o["speed"] < 2.0 else 0
         if self.stall_steps * self.dt > 3.0:
-            r -= w["stall"]
+            c["stall"] = -w["stall"]
             terminated, info["end"] = True, "stalled"
         rs, n = self._corner_events()
-        r += rs
+        c["style"] = rs
         if self.full_lap and self.prog_unw - self.start >= self.L:
             lap_time = float(o["time_s"]) - self.t0
-            r += w["lap"] + w["time"] * (self.ref.lap_time - lap_time)
+            c["lap"] = w["lap"] + w["time"] * (self.ref.lap_time - lap_time)
             terminated, info["end"], info["lap_time"] = True, "lap", lap_time
         if not terminated and ((not self.full_lap and self.steps >= self.episode_steps) or (self.full_lap and o["time_s"] - self.t0 > 300.0)):
             truncated, info["end"] = True, "time"
+        r = float(sum(c.values()))
+        e = self.ep
+        e["inside"] += int(bool(o["inside_track"]))
+        e["speed"] += float(o["speed"])
+        e["elat2"] += float(e_lat) ** 2
+        for k, v in c.items():
+            e["comp"][k] += v
+        if terminated or truncated:
+            se = np.asarray(self.style_errors, float)
+            info["ep_stats"] = {"length": self.steps, "end": info.get("end", "?"), "progress_m": self.prog_unw - self.start, "inside_share": e["inside"] / max(self.steps, 1),
+                                "mean_speed": e["speed"] / max(self.steps, 1), "rms_line_error": float(np.sqrt(e["elat2"] / max(self.steps, 1))), "corners": len(se),
+                                "style_error": float(se.mean()) if len(se) else np.nan, "style_ok_share": float((se <= STYLE_OK).mean()) if len(se) else np.nan,
+                                "style_good_share": float((se <= STYLE_GOOD).mean()) if len(se) else np.nan, **{f"r_{k}": v for k, v in e["comp"].items()}}
         info.update({"progress": self.prog_unw - self.start, "speed": o["speed"], "style_error": float(np.mean(self.style_errors)) if self.style_errors else np.nan})
         return self._observe(o), float(r), terminated, truncated, info

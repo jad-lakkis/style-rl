@@ -3,3 +3,4 @@ pandas
 scipy
 gymnasium
 stable-baselines3
+tensorboard
