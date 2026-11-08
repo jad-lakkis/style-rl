@@ -36,6 +36,48 @@ def lap(env, on_line=True, **kw):
     return res, df
 
 
+def capability(env, ref):
+    """D. What the OCD car can do (brake, accelerate, corner) against what the reference line demands."""
+    print("D. capability of the car against the demand of the reference", flush=True)
+    s = ref.s
+    v, ds = ref.v, float(np.mean(np.diff(s)))
+    a_long = v * np.gradient(v, ds)
+    a_lat = v ** 2 * np.abs(ref.curv)
+    print(f"  reference demands: braking up to {-a_long.min():.1f} m/s2 (p99 {-np.percentile(a_long, 1):.1f}), acceleration up to {np.percentile(a_long, 99):.1f} m/s2 (p99), lateral p99 {np.percentile(a_lat, 99):.1f} m/s2, max {a_lat.max():.1f} m/s2", flush=True)
+    o = env.reset(start_idx=100, speed=65.0)
+    sp = [o["speed"]]
+    for k in range(1, 101):
+        o = env.step_normalized(0.0, 0.0, 1.0)
+        if k % 25 == 0:
+            sp.append(o["speed"])
+    print("  full brake from 65 m/s, deceleration per second: " + ", ".join(f"{(sp[i] - sp[i + 1]):.1f}" for i in range(len(sp) - 1)) + " m/s2", flush=True)
+    o = env.reset(start_idx=100, speed=30.0)
+    sp = [o["speed"]]
+    for k in range(1, 151):
+        o = env.step_normalized(0.0, 1.0, 0.0)
+        if k % 25 == 0:
+            sp.append(o["speed"])
+    print("  full throttle from 30 m/s, acceleration per second: " + ", ".join(f"{(sp[i + 1] - sp[i]):.1f}" for i in range(len(sp) - 1)) + " m/s2", flush=True)
+    for v_t in (40.0, 60.0):
+        row = []
+        for st in (0.25, 0.5, 0.75, 1.0):
+            o = env.reset(start_idx=100, speed=v_t)
+            for k in range(100):
+                thr = float(np.clip(0.5 + 0.2 * (v_t - o["speed"]), 0.0, 1.0))
+                o = env.step_normalized(st, thr, 0.0)
+            row.append(f"steer {st:.2f}: {o['speed'] * abs(o['yaw_rate']):.1f} m/s2 at {o['speed']:.0f} m/s")
+        print(f"  steady cornering at about {v_t:.0f} m/s: " + "; ".join(row), flush=True)
+
+
+def trace(env, kw, start_m=600.0):
+    res, df = lap(env, **kw)
+    print(f"  trace {env.ref.lap_time:.1f}-s reference driver, {kw}: {res['end']} after {res['distance_m']:.0f} m", flush=True)
+    d = df[df.progress >= start_m].iloc[::10]
+    for r in d.itertuples():
+        print(f"    {r.progress:6.0f} m: speed {r.speed * 3.6:5.1f} (ref {env.ref.at(env.ref.v, r.progress) * 3.6:5.1f}) km/h, lateral {r.lateral:+6.1f} (ref {env.ref.at(env.ref.n, r.progress):+5.1f}) m, inside {int(r.inside)}, "
+              f"steer {r.steer:+.2f}, throttle {r.throttle:.2f}, brake {r.brake:.2f}", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", choices=["ocd", "mock"], default="ocd")
@@ -65,6 +107,12 @@ def main():
             r = df[df.progress >= s].iloc[0]
             print(f"    {s:5.0f} m: speed {r.speed * 3.6:5.1f} km/h (reference {env.ref.at(env.ref.v, r.progress) * 3.6:5.1f}), lateral {r.lateral:+5.1f} m (reference {env.ref.at(env.ref.n, r.progress):+5.1f}), "
                   f"steer {r.steer:+.2f}, throttle {r.throttle:.2f}, brake {r.brake:.2f}", flush=True)
+
+    raw2 = make_backend(be)
+    capability(raw2, StyleRacingEnv(driver="attacker", backend=be, full_lap=True).ref)
+    print("E. fine trace of the failure", flush=True)
+    env = StyleRacingEnv(driver="attacker", backend=be, full_lap=True)
+    trace(env, dict(on_line=True, steer_sign=1.0, look0=6.0, look_gain=0.4), start_m=640.0)
 
 
 if __name__ == "__main__":
