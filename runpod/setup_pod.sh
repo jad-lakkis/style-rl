@@ -14,6 +14,12 @@ if [ ! -f "$OCD_DIR/install/local_setup.sh" ]; then
 fi
 source "$OCD_DIR/install/local_setup.sh"
 python3 -c "import ocd_vehicle_models_py; print('OCD python bindings import OK')"
-pip3 install --no-cache-dir "numpy<2" torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+if [ -e /dev/nvidiactl ]; then
+  echo "GPU found: installing the CUDA build of torch"
+  pip3 install --no-cache-dir "numpy<2" torch
+else
+  pip3 install --no-cache-dir "numpy<2" torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+fi
+python3 -c "import torch; print('torch', torch.__version__, 'cuda available:', torch.cuda.is_available())"
 pip3 install --no-cache-dir -r "$(dirname "$0")/../requirements.txt"
 echo "setup done"

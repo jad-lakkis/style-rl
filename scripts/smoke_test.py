@@ -22,6 +22,8 @@ def main():
     ap.add_argument("--backend", choices=["ocd", "mock"], default="ocd")
     ap.add_argument("--train-steps", type=int, default=3000)
     args = ap.parse_args()
+    import torch
+    print(f"torch {torch.__version__}, cuda available: {torch.cuda.is_available()}", flush=True)
     ok, base_weak = True, False
     print("1. simulator", flush=True)
     env = make_backend(args.backend)

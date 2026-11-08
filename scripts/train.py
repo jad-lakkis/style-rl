@@ -74,7 +74,8 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--gamma", type=float, default=0.995)
     ap.add_argument("--learning-starts", type=int, default=5000)
-    ap.add_argument("--train-freq", type=int, default=2)
+    ap.add_argument("--train-freq", type=int, default=0, help="environment steps per update; 0 = 1 on a GPU, 2 on a CPU")
+    ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     ap.add_argument("--episode-steps", type=int, default=700)
     ap.add_argument("--res-steer", type=float, default=0.35)
     ap.add_argument("--res-pedal", type=float, default=0.35)
@@ -84,6 +85,9 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
+    device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
+    if args.train_freq == 0:
+        args.train_freq = 1 if device == "cuda" else 2
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "args.json").write_text(json.dumps({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=1))
     kw = dict(driver=args.driver, backend=args.backend, mode=args.mode, res_steer=args.res_steer, res_pedal=args.res_pedal)
@@ -92,15 +96,15 @@ def main():
     latest = args.out / "latest.zip"
     if latest.is_file():
         print("resuming from", latest, flush=True)
-        model = SAC.load(str(latest), env=env, device="cpu")
+        model = SAC.load(str(latest), env=env, device=device)
         if (args.out / "latest_buffer.pkl").is_file():
             model.load_replay_buffer(str(args.out / "latest_buffer"))
     else:
         model = SAC("MlpPolicy", env, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=args.learning_starts, batch_size=args.batch_size, tau=0.005, gamma=args.gamma,
-                    train_freq=args.train_freq, gradient_steps=1, ent_coef="auto", policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device="cpu", seed=args.seed, verbose=0)
+                    train_freq=args.train_freq, gradient_steps=1, ent_coef="auto", policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
     model.set_logger(configure(str(args.out), ["csv", "stdout"]))
     n_par = sum(p.numel() for p in model.policy.parameters() if p.requires_grad)
-    print(f"{args.driver} ({args.mode}, {args.backend}): reference lap {eval_env.ref.lap_time:.1f} s; network {args.hidden}x{args.hidden}, {n_par:,} trainable parameters", flush=True)
+    print(f"{args.driver} ({args.mode}, {args.backend}): reference lap {eval_env.ref.lap_time:.1f} s; network {args.hidden}x{args.hidden}, {n_par:,} parameters (actor + 2 critics + 2 target critics), device {device}, one update per {args.train_freq} step(s)", flush=True)
     res, _, _ = run_lap(eval_env, None)
     print(f"base driver alone (zero residual): {res['end']}, lap {res['lap_time']:.1f} s, style error {res['style_error']:.2f}, off-track {100 * res['off_track_share']:.1f}%", flush=True)
     cb = Periodic(args, args.out, eval_env, time.time())
