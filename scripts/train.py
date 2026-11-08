@@ -15,6 +15,7 @@ corners/step_<n>.csv (the five style numbers of the agent against the reference 
 """
 import argparse
 import json
+import math
 import shutil
 import subprocess
 import sys
@@ -44,8 +45,8 @@ class BCSAC(SAC):
     The Q term is normalised by the mean |Q| (as in TD3+BC), so one weight works at every reward scale. Used by the pure agents after their warm start: without the pull, the first SAC
     updates unlearn the copied behaviour; with it the policy can improve on the base driver step by step."""
 
-    def __init__(self, *args, bc_weight=5.0, bc_decay=400_000, **kwargs):
-        self.bc_weight, self.bc_decay = bc_weight, bc_decay
+    def __init__(self, *args, bc_weight=5.0, bc_decay=400_000, ent_max=0.1, **kwargs):
+        self.bc_weight, self.bc_decay, self.ent_max = bc_weight, bc_decay, ent_max
         super().__init__(*args, **kwargs)
 
     def train(self, gradient_steps, batch_size=64):
@@ -67,6 +68,7 @@ class BCSAC(SAC):
             ent_coef_loss.backward()
             self.ent_coef_optimizer.step()
             with torch.no_grad():
+                self.log_ent_coef.clamp_(max=math.log(self.ent_max))      # the entropy coefficient may not run away (it did when the pull acted on sampled actions: 3e7)
                 next_actions, next_log_prob = self.actor.action_log_prob(data.next_observations)
                 next_q = torch.cat(self.critic_target(data.next_observations, next_actions), dim=1).min(dim=1, keepdim=True)[0] - ent_coef * next_log_prob.reshape(-1, 1)
                 target_q = data.rewards + (1 - data.dones) * discounts * next_q
@@ -77,7 +79,8 @@ class BCSAC(SAC):
             self.critic.optimizer.step()
             min_q_pi = torch.cat(self.critic(data.observations, actions_pi), dim=1).min(dim=1, keepdim=True)[0]
             rl_loss = (ent_coef * log_prob - min_q_pi).mean()
-            bc_loss = F.mse_loss(actions_pi, data.observations[:, BASE_CMD])
+            mean_actions, _, _ = self.actor.get_action_dist_params(data.observations)
+            bc_loss = F.mse_loss(torch.tanh(mean_actions), data.observations[:, BASE_CMD])     # pull the MEAN action (not the sampled one: that would shrink the spread)
             actor_loss = rl_loss / (min_q_pi.abs().mean().detach() + 1e-6) + w_bc * bc_loss if w_bc > 0 else rl_loss
             actor_losses.append(actor_loss.item())
             bc_losses.append(bc_loss.item())
@@ -284,6 +287,7 @@ def main():
     ap.add_argument("--warm-start", action="store_true", help="pure mode: start from a policy that copies the base driver (behaviour cloning + critic warm-up) instead of random actions")
     ap.add_argument("--bc-weight", type=float, default=0.0, help="weight of the pull towards the base driver's command in the actor loss (0 = plain SAC); fades to 0 over --bc-decay steps")
     ap.add_argument("--bc-decay", type=int, default=400_000)
+    ap.add_argument("--ent-max", type=float, default=0.1, help="upper limit of the entropy coefficient (BC-anchored SAC only)")
     ap.add_argument("--ent-init", type=float, default=0.0, help="initial entropy coefficient (0 = SB3 default 1.0); a warm-started policy needs a small one")
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
@@ -303,7 +307,7 @@ def main():
             model.load_replay_buffer(str(args.out / "latest_buffer"))
     else:
         algo = BCSAC if args.bc_weight > 0 else SAC
-        extra = dict(bc_weight=args.bc_weight, bc_decay=args.bc_decay) if args.bc_weight > 0 else {}
+        extra = dict(bc_weight=args.bc_weight, bc_decay=args.bc_decay, ent_max=args.ent_max) if args.bc_weight > 0 else {}
         model = algo("MlpPolicy", env, **extra, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=args.learning_starts, batch_size=args.batch_size, tau=0.005, gamma=args.gamma,
                     train_freq=args.train_freq, gradient_steps=1, ent_coef=(f"auto_{args.ent_init}" if args.ent_init > 0 else "auto"), policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
     formats = ["csv", "stdout"]

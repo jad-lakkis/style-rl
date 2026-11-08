@@ -23,7 +23,7 @@ for d in attacker smooth; do
     extra=""
     if [ "$m" = "pure" ]; then
       # the pure agents start from a copy of the base driver (the from-scratch version, folder *_pure, did not learn to finish a lap in 40 minutes) and are pulled towards it while it fades
-      name="${d}_pure_bc"
+      name="${d}_pure_bc2"      # bc2: anchor on the mean action + capped entropy coefficient (the first version, *_pure_bc, had its entropy coefficient run away to 3e7)
       extra="--warm-start --learning-starts 0 --ent-init 0.05 --bc-weight ${BC_WEIGHT:-5} --bc-decay ${BC_DECAY:-400000}"
     fi
     python3 scripts/train.py --driver "$d" --mode "$m" --backend ocd --out "$RUNS/$name" --max-hours "$HOURS" --threads 2 --res-steer "$RES" --res-pedal "$RES" $extra > "$RUNS/$name.log" 2>&1 &
