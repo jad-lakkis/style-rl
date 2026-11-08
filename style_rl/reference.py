@@ -1,5 +1,6 @@
 """The reference driver: a simulated driver with a known style, on Monza, as a lap target (line, speed profile, pedals) plus its per-corner style numbers."""
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -14,14 +15,15 @@ DRIVERS = ["attacker", "smooth"]
 
 class Reference:
     def __init__(self, driver, root=ROOT):
-        z = np.load(Path(root) / "targets" / f"{driver}_monza.npz")
+        tdir = Path(os.environ.get("STYLE_TARGETS") or Path(root) / "targets")   # STYLE_TARGETS: use another set of reference laps (e.g. a safety-margin variant)
+        z = np.load(tdir / f"{driver}_monza.npz")
         self.driver = driver
         self.s, self.n, self.xy, self.v, self.thr, self.brk = z["s"], z["n"], z["xy"], z["v"], z["thr"], z["brk"]
         self.t = z["t"]
         self.length = float(z["length"])
         self.ds = float(self.s[1] - self.s[0])
         self.N = len(self.s)
-        info = json.loads((Path(root) / "targets" / "manifest.json").read_text())[driver]
+        info = json.loads((tdir / "manifest.json").read_text())[driver]
         self.lap_time = float(info["lap_time_f317_model_s"])
         self.description = info["description"]
         self.knobs = info["knobs"]

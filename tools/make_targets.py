@@ -31,12 +31,13 @@ def main():
     ap.add_argument("--manifest", type=Path, default=HERE / "targets/manifest.json")
     ap.add_argument("--out", type=Path, default=HERE / "targets")
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--margin", type=float, default=1.0, help="fraction of the measured lateral and braking limits the reference may use (a controller cannot use the last few percent in transitions)")
     args = ap.parse_args()
     if args.old_car:
         env, kd = sd.load_car()
     else:
         j = json.load(open(args.envelope))
-        env = Envelope("ocd_measured", np.array(j["lat_g"]), np.array(j["brk_g"]), np.array(j["acc_ms2"]), v_cap=float(j["v_cap"]), note="measured in the OCD simulation (scripts/measure_ocd_envelope.py)")
+        env = Envelope("ocd_measured", args.margin * np.array(j["lat_g"]), args.margin * np.array(j["brk_g"]), np.array(j["acc_ms2"]), v_cap=float(j["v_cap"]), note="measured in the OCD simulation (scripts/measure_ocd_envelope.py)")
         kd = float(j["kd"])
     manifest = json.load(open(args.manifest))
     tm = sd.TrackModel("monza")
@@ -46,7 +47,7 @@ def main():
         tw = twin_lap(tm, env, kd, sd.Driver(name, m["knobs"], m["skill"]), args.seed)
         np.savez_compressed(args.out / f"{name}_monza.npz", s=tm.s, n=tw["n"], xy=tw["xy"], v=tw["v"], thr=tw["thr"], brk=tw["brk"], t=tw["t"], length=tm.length)
         m["lap_time_f317_model_s"] = float(tw["lap_time"])
-        m["car_envelope"] = "original F317 envelope (theoretical grip)" if args.old_car else "measured in OCD"
+        m["car_envelope"] = "original F317 envelope (theoretical grip)" if args.old_car else f"measured in OCD, lateral and braking limits x {args.margin}"
         print(f"{name}: lap time {tw['lap_time']:.2f} s, top speed {tw['v'].max() * 3.6:.0f} km/h, peak brake {tw['brk'].max():.2f}, min speed {tw['v'].min() * 3.6:.0f} km/h", flush=True)
     json.dump(manifest, open(args.out / "manifest.json", "w"), indent=1)
 

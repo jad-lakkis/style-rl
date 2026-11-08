@@ -5,6 +5,7 @@ B. full laps of the base driver alone for a few settings (steering sign, look-ah
 C. for the best setting, speed and line against the reference every 400 m.
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -108,6 +109,18 @@ def main():
             print(f"    {s:5.0f} m: speed {r.speed * 3.6:5.1f} km/h (reference {env.ref.at(env.ref.v, r.progress) * 3.6:5.1f}), lateral {r.lateral:+5.1f} m (reference {env.ref.at(env.ref.n, r.progress):+5.1f}), "
                   f"steer {r.steer:+.2f}, throttle {r.throttle:.2f}, brake {r.brake:.2f}", flush=True)
 
+    variants = sorted(p for p in (Path(__file__).resolve().parents[1] / "targets" / "variants").glob("m*") if p.is_dir())
+    if variants:
+        print("F. variants of the reference laps (safety margin on the measured limits), base driver alone", flush=True)
+        for tdir in [Path(__file__).resolve().parents[1] / "targets"] + variants:
+            os.environ["STYLE_TARGETS"] = str(tdir)
+            for driver in ("attacker", "smooth"):
+                env = StyleRacingEnv(driver=driver, backend=be, full_lap=True)
+                for look0, gain in ((3.0, 0.3), (6.0, 0.4)):
+                    res, df = lap(env, on_line=True, steer_sign=1.0, look0=look0, look_gain=gain)
+                    print(f"  {tdir.name:6s} {driver:8s} look {look0:.0f}+{gain}v: {res['end']}, distance {res['distance_m']:.0f} m, lap {res['lap_time']:.1f} s (reference {env.ref.lap_time:.1f}), "
+                          f"off-track {100 * res['off_track_share']:.1f}%, style error {res['style_error']:.2f}", flush=True)
+        os.environ.pop("STYLE_TARGETS", None)
     raw2 = make_backend(be)
     capability(raw2, StyleRacingEnv(driver="attacker", backend=be, full_lap=True).ref)
     print("E. fine trace of the failure", flush=True)
