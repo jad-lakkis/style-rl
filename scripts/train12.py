@@ -228,6 +228,8 @@ def main():
     ap.add_argument("--ou-brake", type=float, default=0.02, help="small: brake noise above 0.05 counts as a brake zone and cuts the throttle")
     ap.add_argument("--ou-tau", type=float, default=20.0, help="correlation time of the exploration noise in steps (20 steps = 0.8 s)")
     ap.add_argument("--warm-steps", type=int, default=40_000)
+    ap.add_argument("--no-warm-start", action="store_true", help="start from a random network instead of a copy of the neutral base driver (use with --bc-weight 0, a normal entropy coefficient and the OU noise at 0)")
+    ap.add_argument("--hide-base-command", action="store_true", help="do not put the pure-pursuit command into the observation")
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
@@ -237,7 +239,7 @@ def main():
     (args.out / "args.json").write_text(json.dumps({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=1))
     state_f = args.out / "state.json"
     state = json.loads(state_f.read_text()) if state_f.is_file() else {}
-    env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start)
+    env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command)
     env = Monitor(Style12Env(seed=args.seed, **env_kw))
     eval_env = Style12Env(seed=args.seed + 7, **{**env_kw, "rand_start": 0.0})
     lib = Library(args.out, state.get("library_n", 0))
@@ -278,7 +280,7 @@ def main():
             print(f"baseline {name}: {res['end']}, lap {res['lap_time']:.2f} s, D {res['D']:.2f}, off-track {100 * res['off_share']:.1f}%", flush=True)
         (args.out / "baselines.json").write_text(json.dumps(base, indent=1, default=float))
     base = json.loads((args.out / "baselines.json").read_text())
-    if not latest.is_file():
+    if not latest.is_file() and not args.no_warm_start:
         warm_start(model, env_kw, args, n_steps=args.warm_steps)
         ws, _, _ = run_lap12(eval_env, model)
         print(f"after the warm start: {ws['end']}, lap {ws['lap_time']:.2f} s, D {ws['D']:.2f}, off-track {100 * ws['off_share']:.1f}%", flush=True)

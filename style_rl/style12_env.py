@@ -25,14 +25,17 @@ from style_rl.style12 import RunningStyle, StyleTargets
 from style_rl.style_env import BASE_KW, make_backend, wrap
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_W = dict(time=1.0, off=5.0, off_end=20.0, act=0.005, stall=10.0)
+# penalties: leaving the track costs about 45 in total (1 per step outside for 1 s + 20), a stall 80. The first version had off 5 / stall 10: stopping the car (-34) was cheaper than a crash (-175)
+# and every agent learned to stall once the pull towards the pure-pursuit driver faded.
+DEFAULT_W = dict(time=1.0, off=1.0, off_end=20.0, act=0.005, stall=80.0)
 
 
 class Style12Env(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None):
+    def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False):
         super().__init__()
+        self.hide_base = hide_base      # True: the pure-pursuit command is not part of the observation (the agent has to learn to drive by itself; the track's line and speeds are still given)
         self.driver_name = driver
         self.tg = targets or StyleTargets()
         self.target = self.tg.drivers[driver]
@@ -72,7 +75,7 @@ class Style12Env(gym.Env):
         x = [v / 60, slip / 0.2, o["yaw_rate"] / 1.0, e_lat / 4, head_err / 0.5, float(o["inside_track"]), v_t / 60,
              r.at(r.v, p + 30) / 60, r.at(r.v, p + 80) / 60, r.at(r.v, p + 150) / 60, (v - v_t) / 10,
              r.at(r.curv, p + 10) * 100, r.at(r.curv, p + 30) * 100, r.at(r.curv, p + 60) * 100, r.at(r.curv, p + 120) * 100,
-             self.last[0], self.last[1], self.last[2], r.at(r.thr, p), r.at(r.brk, p), bs, bt, bb,
+             self.last[0], self.last[1], self.last[2], r.at(r.thr, p), r.at(r.brk, p), *((0.0, 0.0, 0.0) if self.hide_base else (bs, bt, bb)),
              np.sin(2 * np.pi * p / self.L), np.cos(2 * np.pi * p / self.L), min(d_c / 300.0, 1.0), ang_c / 90.0]
         run_z = (self.est - self.prior) / self.tg.spread
         frac = np.clip((self.prog_unw - self.start_m) / self.L, 0.0, 1.0)
