@@ -31,9 +31,11 @@ class StyleTargets:
         self.spread = np.array([d["spread"][k] for k in KEYS], float)
         self.drivers = {n: np.array([v[k] for k in KEYS], float) for n, v in d["drivers"].items()}
 
-    def distance(self, a, b):
-        """Mean absolute difference of the 12 numbers, each in units of its spread (1 = as far apart as two typical real driver-track cells)."""
-        return float(np.mean(np.abs(np.asarray(a, float) - np.asarray(b, float)) / self.spread))
+    def distance(self, a, b, clip=None):
+        """Mean absolute difference of the 12 numbers, each in units of its spread (1 = as far apart as two typical real driver-track cells).
+        clip: no single number counts for more than this many spread units (a car that is thrown about early in training has numbers far outside anything real)."""
+        e = np.abs(np.asarray(a, float) - np.asarray(b, float)) / self.spread
+        return float(np.mean(e if clip is None else np.minimum(e, clip)))
 
 
 class RunningStyle:

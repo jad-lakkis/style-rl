@@ -230,6 +230,16 @@ def main():
     ap.add_argument("--warm-steps", type=int, default=40_000)
     ap.add_argument("--no-warm-start", action="store_true", help="start from a random network instead of a copy of the neutral base driver (use with --bc-weight 0, a normal entropy coefficient and the OU noise at 0)")
     ap.add_argument("--hide-base-command", action="store_true", help="do not put the pure-pursuit command into the observation")
+    ap.add_argument("--line-w", type=float, default=0.0, help="penalty per step for being off the track's own line (see style12_env.py); 0 = none")
+    ap.add_argument("--line-delta", type=float, default=1.0, help="metres from the line below which the line penalty is quadratic (smooth), linear beyond")
+    ap.add_argument("--line-decay", type=int, default=0, help="steps over which the line penalty fades to --line-floor of its value (0 = constant)")
+    ap.add_argument("--line-floor", type=float, default=0.4)
+    ap.add_argument("--prog-w", type=float, default=0.0, help="reward per metre driven (the same for every finished lap; a crash loses the progress still to come)")
+    ap.add_argument("--style-dense", type=float, default=0.0, help="weight of the style penalty paid all along the lap: -style_dense x lam x D x (share of the lap driven)")
+    ap.add_argument("--style-clip", type=float, default=4.0, help="no single number counts for more than this many spread units in that penalty")
+    ap.add_argument("--start-speed-lo", type=float, default=0.85, help="a training lap that starts at a random point starts at between this share and 1.0 of the line's speed there")
+    ap.add_argument("--init-log-std-scratch", action="store_true", help="with --no-warm-start: also start the policy's own noise at --init-log-std (tiny), so that the exploration is the correlated noise")
+    ap.add_argument("--init-throttle", type=float, default=0.0, help="with --no-warm-start: the untrained policy's mean throttle (a bias, so that the car drives forward from the first step)")
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
@@ -239,7 +249,9 @@ def main():
     (args.out / "args.json").write_text(json.dumps({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=1))
     state_f = args.out / "state.json"
     state = json.loads(state_f.read_text()) if state_f.is_file() else {}
-    env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command)
+    env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command,
+                  line_w=args.line_w, line_delta=args.line_delta, line_decay=args.line_decay, line_floor=args.line_floor, prog_w=args.prog_w, style_dense=args.style_dense, style_clip=args.style_clip,
+                  start_speed_lo=args.start_speed_lo)
     env = Monitor(Style12Env(seed=args.seed, **env_kw))
     eval_env = Style12Env(seed=args.seed + 7, **{**env_kw, "rand_start": 0.0})
     lib = Library(args.out, state.get("library_n", 0))
@@ -249,10 +261,18 @@ def main():
         model = BCSAC.load(str(latest), env=env, device=device)
         if (args.out / "latest_buffer.pkl").is_file():
             model.load_replay_buffer(str(args.out / "latest_buffer"))
+        env.unwrapped.total_steps = model.num_timesteps          # the line penalty fades with the steps taken so far
     else:
         model = BCSAC("MlpPolicy", env, bc_weight=args.bc_weight, bc_decay=args.bc_decay, ent_max=args.ent_max, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=0, batch_size=args.batch_size,
                       tau=0.005, gamma=args.gamma, train_freq=args.train_freq, gradient_steps=1, ent_coef=f"auto_{args.ent_init}", target_entropy=args.target_entropy,
                       policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
+        if args.no_warm_start:
+            with torch.no_grad():
+                if args.init_log_std_scratch:
+                    model.actor.log_std.bias.fill_(args.init_log_std)
+                    model.actor.log_std.weight.zero_()
+                if args.init_throttle > 0:
+                    model.actor.mu.bias[1] = float(np.arctanh(min(args.init_throttle, 0.95)))      # the mean action is tanh(mu): this is the throttle of the untrained policy
     theta = 1.0 / args.ou_tau       # exploration noise: Ornstein-Uhlenbeck, stationary standard deviation = the --ou-* values, correlation time --ou-tau steps
     stat = np.array([args.ou_steer, args.ou_throttle, args.ou_brake])
     model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(3), sigma=stat * np.sqrt(2 * theta), theta=theta, dt=1.0)

@@ -11,6 +11,10 @@ What it is paid:
           lam is a Lagrange multiplier: after every finished lap  lam <- clip(lam + eta x (D_end - d_max), 0, lam_max). While the lap's style is further from the target than the
           margin d_max the style weighs more, once it is inside, it weighs less and the agent may spend the room on speed.
   off     -off per step outside the track, the episode ends after 1 s outside (-off_end); a stall ends it too (-stall); a small penalty for jerky pedals.
+Optional helpers for an agent that has to learn to drive from nothing (all off by default, so the runs without them are unchanged):
+  line    -line_w x (distance of the car from the track's own line, a smooth penalty that grows linearly beyond line_delta metres) every step; fades to line_floor of its value over line_decay steps.
+  prog    +prog_w per metre driven. Every finished lap covers the same distance, so it changes nothing for a finished lap; it only makes a crash cost the progress that was still to come.
+  sdense  -style_dense x lam x (distance D of the 12 numbers measured so far to the target) x (share of the lap driven in this step): the style is paid all along the lap, not only through the change of D.
 The lap library: every finished lap is returned in info["lap"] (time, position, pedals, ...) together with its lap time and 12 numbers.
 """
 from pathlib import Path
@@ -33,9 +37,14 @@ DEFAULT_W = dict(time=1.0, off=1.0, off_end=20.0, act=0.005, stall=80.0)
 class Style12Env(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False):
+    def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False,
+                 line_w=0.0, line_delta=1.0, line_cap=6.0, line_decay=0, line_floor=0.4, prog_w=0.0, style_dense=0.0, style_clip=4.0, start_speed_lo=0.85):
         super().__init__()
         self.hide_base = hide_base      # True: the pure-pursuit command is not part of the observation (the agent has to learn to drive by itself; the track's line and speeds are still given)
+        self.line_w, self.line_delta, self.line_cap, self.line_decay, self.line_floor = line_w, line_delta, line_cap, int(line_decay), line_floor
+        self.prog_w, self.style_dense, self.style_clip, self.start_speed_lo = prog_w, style_dense, style_clip, start_speed_lo
+        self.total_steps = 0            # steps taken by this environment so far (the line penalty fades with it); the training script sets it when a run is resumed
+        self.comp_names = ("time", "style", "off", "jerk", "stall") + (("line",) if line_w > 0 else ()) + (("prog",) if prog_w > 0 else ()) + (("sdense",) if style_dense > 0 else ())
         self.driver_name = driver
         self.tg = targets or StyleTargets()
         self.target = self.tg.drivers[driver]
@@ -100,7 +109,7 @@ class Style12Env(gym.Env):
             start = float(self.rng.uniform(0, self.L)) if self.rng.random() < self.rand_start else 0.0
         p0 = float(start)
         r = self.neutral
-        v0 = float(r.at(r.v, p0)) * (1.0 if p0 == 0.0 else float(self.rng.uniform(0.85, 1.0)))
+        v0 = float(r.at(r.v, p0)) * (1.0 if p0 == 0.0 else float(self.rng.uniform(self.start_speed_lo, 1.0)))
         n_pts = len(self.env.track.center)
         pose = (float(r.at(r.xy[:, 0], p0)), float(r.at(r.xy[:, 1], p0)), float(r.at_angle(r.heading, p0)))
         o = self.env.reset(start_idx=int(p0 / (self.L / n_pts)) % n_pts, speed=v0, pose=pose)
@@ -113,8 +122,9 @@ class Style12Env(gym.Env):
         self.style.reset()
         self.est, self.meas = self.prior.copy(), self.prior.copy()
         self.D_prev = self.D0 = self.tg.distance(self.est, self.target)
+        self.D_dense = self.tg.distance(self.meas, self.target, self.style_clip)
         self.log = {k: [] for k in ("t", "x", "y", "speed", "lateral", "steer", "throttle", "brake", "progress", "inside")}
-        self.ep = {"off_steps": 0, "comp": dict.fromkeys(("time", "style", "off", "jerk", "stall"), 0.0)}
+        self.ep = {"off_steps": 0, "comp": dict.fromkeys(self.comp_names, 0.0)}
         return self._observe(o), {}
 
     def step(self, action):
@@ -138,9 +148,19 @@ class Style12Env(gym.Env):
             lg[k].append(v)
         self.style.add(o["time_s"], thr, brk, steer, o["progress_m"], o["lateral_m"], o["left_width_m"], o["right_width_m"])
         w = self.w
-        c = dict.fromkeys(("time", "style", "off", "jerk", "stall"), 0.0)
+        c = dict.fromkeys(self.comp_names, 0.0)
         c["time"] = w["time"] * ((self.t_ref(self.prog_unw) - self.t_ref(p_before)) - self.dt)
         c["jerk"] = -w["act"] * float(np.abs(self.last - prev).sum())
+        self.total_steps += 1
+        dd = float(np.clip(d, -5.0, 8.0))
+        if self.line_w > 0:
+            fade = 1.0 if self.line_decay <= 0 else max(self.line_floor, 1.0 - self.total_steps / self.line_decay)
+            e = min(abs(float(o["lateral_m"]) - float(self.neutral.at(self.neutral.n, o["progress_m"]))), self.line_cap)
+            c["line"] = -self.line_w * fade * (e * e / (2.0 * self.line_delta) if e < self.line_delta else e - 0.5 * self.line_delta)
+        if self.prog_w > 0:
+            c["prog"] = self.prog_w * dd
+        if self.style_dense > 0:
+            c["sdense"] = -self.style_dense * self.lam * self.D_dense * dd / self.L
         terminated, truncated, info = False, False, {}
         if not o["inside_track"]:
             c["off"] -= w["off"]
@@ -161,6 +181,7 @@ class Style12Env(gym.Env):
             D = self.tg.distance(self.est, self.target)
             c["style"] = -self.lam * (D - self.D_prev)
             self.D_prev = D
+            self.D_dense = self.tg.distance(self.meas, self.target, self.style_clip)
         if done_lap and not terminated:
             lap_time = float(o["time_s"]) - self.t0
             terminated, info["end"], info["lap_time"] = True, "lap", lap_time
