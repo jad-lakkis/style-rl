@@ -26,6 +26,7 @@ from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.noise import OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.utils import polyak_update
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -173,9 +174,9 @@ def warm_start(model, env_kw, args, n_steps=40_000, bc_steps=4000, critic_steps=
         opt.step()
         if i % 1000 == 0 or i == bc_steps - 1:
             print(f"warm start: behaviour cloning step {i}, mean squared error {loss.item():.5f}", flush=True)
-    with torch.no_grad():
-        model.actor.log_std.bias.fill_(-2.0)
-        model.actor.log_std.weight.mul_(0.1)
+    with torch.no_grad():                                    # the policy's own noise starts (almost) at zero: white noise written into the pedals and the wheel is measured as style (see main)
+        model.actor.log_std.bias.fill_(args.init_log_std)
+        model.actor.log_std.weight.zero_()
     ent = torch.exp(model.log_ent_coef.detach())
     for i in range(critic_steps):
         data = model.replay_buffer.sample(256)
@@ -213,13 +214,19 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--d-max", type=float, default=0.3, help="style margin: largest distance D (spread units) of the lap's 12 numbers to the target that the multiplier tolerates")
     ap.add_argument("--lam0", type=float, default=3.0)
-    ap.add_argument("--lam-eta", type=float, default=0.3)
-    ap.add_argument("--lam-max", type=float, default=30.0)
+    ap.add_argument("--lam-eta", type=float, default=0.2)
+    ap.add_argument("--lam-max", type=float, default=20.0)
     ap.add_argument("--rand-start", type=float, default=0.5, help="share of training laps that start at a random point of the lap instead of the line")
     ap.add_argument("--bc-weight", type=float, default=5.0)
     ap.add_argument("--bc-decay", type=int, default=500_000)
     ap.add_argument("--ent-max", type=float, default=0.1)
-    ap.add_argument("--ent-init", type=float, default=0.05)
+    ap.add_argument("--ent-init", type=float, default=1e-4, help="initial entropy coefficient; tiny: the exploration is the correlated noise below, not the policy's own white noise")
+    ap.add_argument("--target-entropy", type=float, default=-30.0, help="very low: the policy's own noise is not wanted (white noise per step shows up in hand speed and steering corrections)")
+    ap.add_argument("--init-log-std", type=float, default=-7.0, help="log of the policy's own noise at the start")
+    ap.add_argument("--ou-steer", type=float, default=0.03, help="exploration: Ornstein-Uhlenbeck noise (slow, correlated), standard deviation of the steering command")
+    ap.add_argument("--ou-throttle", type=float, default=0.05)
+    ap.add_argument("--ou-brake", type=float, default=0.02, help="small: brake noise above 0.05 counts as a brake zone and cuts the throttle")
+    ap.add_argument("--ou-tau", type=float, default=20.0, help="correlation time of the exploration noise in steps (20 steps = 0.8 s)")
     ap.add_argument("--warm-steps", type=int, default=40_000)
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
@@ -242,7 +249,11 @@ def main():
             model.load_replay_buffer(str(args.out / "latest_buffer"))
     else:
         model = BCSAC("MlpPolicy", env, bc_weight=args.bc_weight, bc_decay=args.bc_decay, ent_max=args.ent_max, learning_rate=args.lr, buffer_size=args.buffer, learning_starts=0, batch_size=args.batch_size,
-                      tau=0.005, gamma=args.gamma, train_freq=args.train_freq, gradient_steps=1, ent_coef=f"auto_{args.ent_init}", policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
+                      tau=0.005, gamma=args.gamma, train_freq=args.train_freq, gradient_steps=1, ent_coef=f"auto_{args.ent_init}", target_entropy=args.target_entropy,
+                      policy_kwargs={"net_arch": [args.hidden, args.hidden]}, device=device, seed=args.seed, verbose=0)
+    theta = 1.0 / args.ou_tau       # exploration noise: Ornstein-Uhlenbeck, stationary standard deviation = the --ou-* values, correlation time --ou-tau steps
+    stat = np.array([args.ou_steer, args.ou_throttle, args.ou_brake])
+    model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(3), sigma=stat * np.sqrt(2 * theta), theta=theta, dt=1.0)
     formats = ["csv", "stdout"]
     try:
         import tensorboard  # noqa: F401

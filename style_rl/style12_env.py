@@ -161,8 +161,7 @@ class Style12Env(gym.Env):
         if done_lap and not terminated:
             lap_time = float(o["time_s"]) - self.t0
             terminated, info["end"], info["lap_time"] = True, "lap", lap_time
-            if self.start_m == 0.0:                                        # the multiplier follows the laps that count (flying laps from the line)
-                self.lam = float(np.clip(self.lam + self.lam_eta * (self.D_prev - self.d_max), 0.0, self.lam_max))
+            self.lam = float(np.clip(self.lam + self.lam_eta * (self.D_prev - self.d_max), 0.0, self.lam_max))     # every finished lap moves the multiplier
         if not terminated and o["time_s"] - self.t0 > 300.0:
             truncated, info["end"] = True, "time"
         r = float(sum(c.values()))
