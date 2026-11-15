@@ -28,5 +28,20 @@
   "lap_time_f317_model_s": 119.12000000000742,
   "description": "Smooth momentum driver: brakes early and gently, progressive release, patient throttle, calm hands, understeer-prone",
   "car_envelope": "measured in OCD"
+ },
+ "neutral": {
+  "knobs": {
+   "brake_intensity": 0.0,
+   "trail_release": 0.0,
+   "throttle_pickup": 0.0,
+   "steer_activity": 0.0,
+   "apex_timing": 0.0,
+   "width_use": 0.0,
+   "rotation": 0.0
+  },
+  "skill": 0.95,
+  "lap_time_f317_model_s": 116.400000000007,
+  "description": "Driver-independent line and speeds: every style knob at 0, skill 0.95",
+  "car_envelope": "measured in OCD"
  }
 }

@@ -1,0 +1,74 @@
+{
+ "keys": [
+  "B_mean_active",
+  "B_event_peak_mean",
+  "B_apply_rate",
+  "B_release_rate",
+  "T_apply_rate",
+  "T_release_rate",
+  "S_reversals_5deg_per_km",
+  "S_mean_abs_rate",
+  "S_corner_peak_angle",
+  "L_border_mean_m",
+  "L_inside_dist_apex_m",
+  "L_outside_dist_exit_m"
+ ],
+ "spread": {
+  "B_mean_active": 0.12293215023176836,
+  "B_event_peak_mean": 0.1132431852923235,
+  "B_apply_rate": 3.0682534440573352,
+  "B_release_rate": 0.7660862191369293,
+  "T_apply_rate": 0.4199931446049465,
+  "T_release_rate": 0.47269068518814317,
+  "S_reversals_5deg_per_km": 6.018354567009362,
+  "S_mean_abs_rate": 8.261121482308232,
+  "S_corner_peak_angle": 6.79504450242412,
+  "L_border_mean_m": 0.47137523775939616,
+  "L_inside_dist_apex_m": 0.7386211623797083,
+  "L_outside_dist_exit_m": 0.6400147500075859
+ },
+ "drivers": {
+  "attacker": {
+   "B_mean_active": 0.7331650414218964,
+   "B_event_peak_mean": 0.8750331667550721,
+   "B_apply_rate": 5.080975186610576,
+   "B_release_rate": 0.6943603903424229,
+   "T_apply_rate": 0.7825370076723431,
+   "T_release_rate": 2.82615066942624,
+   "S_reversals_5deg_per_km": 23.458528966866194,
+   "S_mean_abs_rate": 24.168938883993423,
+   "S_corner_peak_angle": 66.15673247152282,
+   "L_border_mean_m": 2.123983579020493,
+   "L_inside_dist_apex_m": 1.4292729668430204,
+   "L_outside_dist_exit_m": 4.065159380568293
+  },
+  "smooth": {
+   "B_mean_active": 0.43442191382689627,
+   "B_event_peak_mean": 0.47875755161591027,
+   "B_apply_rate": 0.840943915587989,
+   "B_release_rate": 0.37293727986276803,
+   "T_apply_rate": 0.36271523827277924,
+   "T_release_rate": 3.8121599449210883,
+   "S_reversals_5deg_per_km": 3.301570743484872,
+   "S_mean_abs_rate": 15.177174194819887,
+   "S_corner_peak_angle": 71.8926977868224,
+   "L_border_mean_m": 2.4443325481321767,
+   "L_inside_dist_apex_m": 1.583031047396012,
+   "L_outside_dist_exit_m": 3.905916386287344
+  },
+  "neutral": {
+   "B_mean_active": 0.5880190888747001,
+   "B_event_peak_mean": 0.6885114499973553,
+   "B_apply_rate": 1.3222455192833895,
+   "B_release_rate": 0.4474736130229952,
+   "T_apply_rate": 0.483316182000203,
+   "T_release_rate": 3.4622688528169516,
+   "S_reversals_5deg_per_km": 12.163681686523212,
+   "S_mean_abs_rate": 18.944465394356317,
+   "S_corner_peak_angle": 63.182837581604794,
+   "L_border_mean_m": 2.390144397389755,
+   "L_inside_dist_apex_m": 1.4233604425485717,
+   "L_outside_dist_exit_m": 4.049434975252613
+  }
+ }
+}
