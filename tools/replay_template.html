@@ -46,7 +46,7 @@ input[type=range]{vertical-align:middle}
 <table id="tab"></table>
 <h3>Sectors: time of each lap (click a row to zoom in; the laps then start together at the sector entry)</h3>
 <table id="sectab"></table>
-<h3>The 12 style numbers of each lap: value, and distance from the target in spread units</h3>
+<h3>The 12 style numbers of each lap, as they are (each in its own unit)</h3>
 <table id="sty"></table>
 <p class="note"><b>3D chase camera:</b> the camera follows the chosen lap from behind; every lap is a car on the road and its racing line is drawn on the asphalt, so you see how each one takes the corner. "At the same place" puts all cars at the same distance along the track, so only the line and the speed differ; "at the same moment" is a live race in which the faster laps pull away. Drag = look around the car, wheel = closer / further, double-click = reset the camera. Bottom left of the view: speed, brake (red) and throttle (green) of each lap.<br>
 All laps are the same car on the same track in the simulator, started on the line. In a sector view they all start at the sector entry at the same moment.
@@ -198,9 +198,9 @@ function build(){ D = DATA.drivers[$("drv").value];
       return `<tr class="row" data-i="${i - 1}"><td>${s.name}</td><td>${Math.round(s.a)}-${Math.round(s.b)}</td><td>${tt.driver.toFixed(2)}</td>` + ["small","keep","fast"].map(k => { const d = tt[k] - tt.driver; return `<td class="${d < 0 ? "neg" : "pos"}">${d >= 0 ? "+" : ""}${d.toFixed(2)}</td>`; }).join("") + "</tr>"; }).join("");
   $("sectab").querySelectorAll("tr.row").forEach(r => r.onclick = () => { $("sec").value = r.dataset.i; setSector(); });
   $("sec").innerHTML = "<option value='-1'>whole lap</option>" + D.sectors.map((s, i) => `<option value='${i}'>${s.name}  (${Math.round(s.a)}-${Math.round(s.b)} m)</option>`).join("");
-  const S_ = D.style; $("sty").innerHTML = "<tr><th>number</th><th>target</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
-    S_.keys.map((key, i) => `<tr><td title="${key}">${S_.plain[i]}</td><td>${S_.target[i].toFixed(2)}</td>` + ORDER.map(k => { const v = S_.vals[k][i], d = (v - S_.target[i]) / S_.spread[i]; return `<td>${v.toFixed(2)} <span class="${Math.abs(d) > 1 ? "pos" : ""}" style="font-size:11px">(${d >= 0 ? "+" : ""}${d.toFixed(1)})</span></td>`; }).join("") + "</tr>").join("") +
-    `<tr><td><b>D (all 12)</b></td><td>0</td>` + ORDER.map(k => `<td><b>${D.laps[k].D.toFixed(2)}</b></td>`).join("") + "</tr>";
+  const S_ = D.style; $("sty").innerHTML = "<tr><th>style number [unit]</th><th>target</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
+    S_.keys.map((key, i) => `<tr><td title="${key}">${S_.plain[i]} [${S_.unit[i]}]</td><td>${S_.target[i].toFixed(2)}</td>` + ORDER.map(k => `<td>${S_.vals[k][i].toFixed(2)}</td>`).join("") + "</tr>").join("") +
+    `<tr><td><b>D = distance of the 12 numbers to the target (the constrained quantity)</b></td><td>0</td>` + ORDER.map(k => `<td><b>${D.laps[k].D.toFixed(2)}</b></td>`).join("") + "</tr>";
   sec = null; $("sec").value = "-1"; fit(); t = 0; draw(); }
 function setSector(){ const i = parseInt($("sec").value); sec = i < 0 ? null : D.sectors[i]; document.querySelectorAll("#sectab tr.row").forEach(r => r.classList.toggle("sel", parseInt(r.dataset.i) === i)); fit(); t = sec ? tRange()[0] : 0; draw(); }
 function setView(){ const chase = $("view").value === "chase"; $("camlab").style.display = $("modelab").style.display = chase ? "" : "none"; $("hint").textContent = chase ? "drag = look around the car, wheel = closer / further, double-click = reset the camera" : "drag = move, wheel = zoom, double-click = reset"; draw(); }
