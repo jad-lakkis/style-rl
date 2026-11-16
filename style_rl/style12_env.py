@@ -42,8 +42,10 @@ class Style12Env(gym.Env):
 
     def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False,
                  line_w=0.0, line_delta=1.0, line_cap=6.0, line_decay=0, line_floor=0.4, prog_w=0.0, style_dense=0.0, style_clip=4.0, start_speed_lo=0.85,
-                 residual=False, res_steer=0.1, res_pedal=0.2, pedal_axis=False, steer_auth=0.0, speed_w=0.0, style_w=1.0):
+                 residual=False, res_steer=0.1, res_pedal=0.2, pedal_axis=False, steer_auth=0.0, speed_w=0.0, style_w=1.0, ped_w=0.0, ped_decay=0):
         super().__init__()
+        self.ped_w, self.ped_decay = ped_w, int(ped_decay)   # >0: -ped_w x |pedal axis - the track line's pedal axis here| every step (the line's own throttle/brake, which the agent also sees): a dense signal to brake where the line brakes.
+        #                                 Fades linearly to 0 over ped_decay steps (0 = no fade). The track's line is driver-independent; this is a training aid for stage 1, not part of the final objective
         self.steer_auth = steer_auth    # >0: the steering action is scaled by the speed: action 1.0 = the wheel angle that gives about steer_auth m/s^2 of lateral acceleration (kinematic), never more than full lock.
         #                                 At 60 m/s full lock is ~20 g, the useful range is a few percent of the action range; this gives the agent (and its exploration noise) a usable scale. 0 = off (action 1.0 = full lock)
         self.speed_w = speed_w          # >0: -speed_w x min(|v - speed of the track's line here| / 10 m/s, 3) every step (follow the line's speed profile; stops the agent from learning to crawl)
@@ -55,7 +57,7 @@ class Style12Env(gym.Env):
         self.line_w, self.line_delta, self.line_cap, self.line_decay, self.line_floor = line_w, line_delta, line_cap, int(line_decay), line_floor
         self.prog_w, self.style_dense, self.style_clip, self.start_speed_lo = prog_w, style_dense, style_clip, start_speed_lo
         self.total_steps = 0            # steps taken by this environment so far (the line penalty fades with it); the training script sets it when a run is resumed
-        self.comp_names = ("time", "style", "off", "jerk", "stall") + (("line",) if line_w > 0 else ()) + (("prog",) if prog_w > 0 else ()) + (("sdense",) if style_dense > 0 else ()) + (("speed",) if speed_w > 0 else ())
+        self.comp_names = ("time", "style", "off", "jerk", "stall") + (("line",) if line_w > 0 else ()) + (("prog",) if prog_w > 0 else ()) + (("sdense",) if style_dense > 0 else ()) + (("speed",) if speed_w > 0 else ()) + (("ped",) if ped_w > 0 else ())
         self.driver_name = driver
         self.tg = targets or StyleTargets()
         self.target = self.tg.drivers[driver]
@@ -194,6 +196,10 @@ class Style12Env(gym.Env):
             c["prog"] = self.prog_w * dd
         if self.speed_w > 0:
             c["speed"] = -self.speed_w * min(abs(float(o["speed"]) - float(self.neutral.at(self.neutral.v, o["progress_m"]))) / 10.0, 3.0)
+        if self.ped_w > 0:
+            pf = 1.0 if self.ped_decay <= 0 else max(0.0, 1.0 - self.total_steps / self.ped_decay)
+            pr = float(self.neutral.at(self.neutral.thr, o["progress_m"]) - self.neutral.at(self.neutral.brk, o["progress_m"]))
+            c["ped"] = -self.ped_w * pf * abs((thr - brk) - pr)
         if self.style_dense > 0:
             c["sdense"] = -self.style_w * self.style_dense * self.lam * self.D_dense * dd / self.L
         terminated, truncated, info = False, False, {}
