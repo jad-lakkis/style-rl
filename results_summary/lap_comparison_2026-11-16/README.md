@@ -17,7 +17,7 @@ The driver's run against two RL laps, for the attacker and the smooth driver (tw
 
 - `replay.html`: the driver's run and the RL style-kept lap as cars on a 3D road with a chase camera, a sector view, the tables, and the coaching brief (the corner sentences are clickable and jump to their corner; two buttons copy the brief or the whole prompt). To open it: in VS Code right-click `replay.html`, "Reveal in File Explorer", double-click it (Chrome or Edge).
 - `<driver>_1_lap_time.png`: lap times and the time gained in each sector.
-- `<driver>_2_style.png`: the 12 style numbers of the three laps, as they are, each in its own unit.
+- `<driver>_2_style.png`: the 12 style numbers of the three laps (driver's run, style kept, fastest), as they are, each in its own unit.
 - `<driver>_3_driving.png`: speed, throttle, brake and steering along the lap.
 - `summary.csv`, `<driver>_sectors.csv`, `<driver>_style_numbers.csv`: the numbers behind the figures.
 - `coaching/`: the input for the LLM coach (see below).
@@ -26,8 +26,8 @@ The driver's run against two RL laps, for the attacker and the smooth driver (tw
 
 Nothing here calls an LLM. The facts are measured on the laps and written into sentences by fixed rules, so every number in the text is a measurement.
 
-- `coach_facts.csv` (the small table, both drivers): one row per fact: `level` (lap, sector, corner, style), `item`, `metric`, `unit`, the value for the driver's run, the RL style-kept lap and the RL fastest lap, and the change from the driver's run. Corner facts: where braking starts (m before the apex), the peak brake, the lowest speed, where the throttle comes back (m after the apex), the speed 80 m after the apex, the line at the apex (m towards the inside).
-- `<driver>_brief.md`: the same facts as plain sentences: the laps, where the time is gained, corner by corner, the style (what changes and what stays the same), the fastest lap for comparison, and what the data cannot say.
+- `coach_facts.csv` (the small table, both drivers): one row per fact: `level` (lap, sector, corner, style), `item`, `metric`, `unit`, the value for the driver's run and for the RL style-kept lap, and the change. Corner facts: where braking starts (m before the apex), the peak brake, the lowest speed, where the throttle comes back (m after the apex), the speed 80 m after the apex, the line at the apex (m towards the inside).
+- `<driver>_brief.md`: the same facts as plain sentences: the laps, where the time is gained, corner by corner, the style (what changes and what stays the same), and what the data cannot say.
 - `brief_data.json`: the brief in the form the replay page shows. Run `tools/coach_brief.py` before `tools/lap_report.py`.
 - `<driver>_prompt.md`: an example prompt: the instructions for the LLM (use only the facts, at most three priorities, per corner, what to keep, what the data cannot say) and the brief.
 
