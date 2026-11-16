@@ -20,22 +20,22 @@ th:first-child,td:first-child{text-align:left}
 button,select{font:inherit;padding:2px 8px}
 input[type=range]{vertical-align:middle}
 .note{color:#555;font-size:12px}
-.hint{color:#666;font-size:12px;margin-left:10px}
+.hint{color:#666;font-size:12px}
 .neg{color:#0a6b3d}.pos{color:#a33}
-b.off{color:#a33}
 </style></head><body>
 <header><h1>Lap replay</h1>
 <label>Driver <select id="drv"></select></label>
-<label>View <select id="view"><option value="3d">3D</option><option value="2d">2D map</option></select></label>
+<label>View <select id="view"><option value="chase">3D chase camera</option><option value="2d">2D map</option></select></label>
+<label id="camlab">Camera behind <select id="cam"></select></label>
+<label id="modelab">Cars placed <select id="mode"><option value="place">at the same place on the track</option><option value="moment">at the same moment (live race)</option></select></label>
 <label>Sector <select id="sec"></select></label>
 <button id="play">Play</button>
 <label>Speed <select id="rate"><option value="0.1">0.1x</option><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
-<label id="hl">3D height = <select id="hmode"><option value="speed">speed</option><option value="flat">nothing (flat)</option></select> exaggeration <input type="range" id="hs" min="0.3" max="8" step="0.1" value="1" style="width:90px"></label>
-<label><input type="checkbox" id="trail" checked> trails</label>
+<label><input type="checkbox" id="trail" checked> racing lines</label>
 </header>
 <main>
 <div class="left">
-<canvas id="map" width="840" height="600"></canvas>
+<canvas id="map" width="840" height="560"></canvas>
 <input type="range" id="scrub" min="0" max="1000" value="0" style="width:480px"> <span id="clock"></span>
 <div class="hint" id="hint" style="margin:0 0 6px 0"></div>
 <canvas id="trace" width="840" height="150"></canvas>
@@ -48,45 +48,110 @@ b.off{color:#a33}
 <table id="sectab"></table>
 <h3>The 12 style numbers of each lap: value, and distance from the target in spread units</h3>
 <table id="sty"></table>
-<p class="note">All laps are the same car on the same track in the simulator, started on the line. In the whole-lap view they run side by side in time; in a sector view they all start at the sector entry at the same moment, so what you see is only what happens inside the sector.
-"gap" = the seconds this lap needs less (-) or more (+) than the driver's run to reach the place where it is now (in a sector view: counted from the sector entry). "ahead" = metres in front of the driver's run at the same moment.
-3D: height = speed (turn it off or change the exaggeration at the top); the thin line under a dot goes down to the track. Drag = turn, wheel = zoom, double-click = reset the view.</p>
+<p class="note"><b>3D chase camera:</b> the camera follows the chosen lap from behind; every lap is a car on the road and its racing line is drawn on the asphalt, so you see how each one takes the corner. "At the same place" puts all cars at the same distance along the track, so only the line and the speed differ; "at the same moment" is a live race in which the faster laps pull away. Drag = look around the car, wheel = closer / further, double-click = reset the camera. Bottom left of the view: speed, brake (red) and throttle (green) of each lap.<br>
+All laps are the same car on the same track in the simulator, started on the line. In a sector view they all start at the sector entry at the same moment.
+"gap" = the seconds this lap needs less (-) or more (+) than the driver's run to reach the place where it is now (in a sector view: counted from the sector entry). "ahead" = metres in front of the driver's run at the same moment.</p>
 </div>
 </main>
 <script>
-const DATA = __DATA__;
-const COL = {driver:"#555555", small:"#009E73", keep:"#0072B2", fast:"#D55E00"};
+const DATA = __DATA__, T = DATA.track;
+const COL = {driver:"#555555", small:"#CC79A7", keep:"#0072B2", fast:"#D55E00"};
 const NAME = {driver:"driver's run", small:"RL lap, small gain", keep:"RL lap, style kept", fast:"RL fastest lap"};
+const SHORT = {driver:"driver's run", small:"small gain", keep:"style kept", fast:"fastest"};
 const ORDER = ["driver","small","keep","fast"];
 const $ = id => document.getElementById(id);
 const cv = $("map"), ctx = cv.getContext("2d"), tr = $("trace"), tctx = tr.getContext("2d"), df = $("diff"), dctx = df.getContext("2d"), gc = $("gapc"), gctx = gc.getContext("2d");
 let D, sec = null, on = {driver:true, small:true, keep:true, fast:true}, t = 0, playing = false, last = null;
-const V = {cx:0, cy:0, ext:1000, zoom:1, yaw:0.55, pitch:0.95, is3d:true};
-Object.keys(DATA).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = k; $("drv").appendChild(o); });
+const V = {cx:0, cy:0, ext:1000, zoom:1};                   // 2D view
+const CAM = {phi:0, back:13, height:4.0};                    // chase camera: orbit angle, distance behind, height
+Object.keys(DATA.drivers).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = k; $("drv").appendChild(o); });
+ORDER.forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = NAME[k]; $("cam").appendChild(o); });
 
 // ---- lookups on a lap (arrays on a 0.1 s grid)
 function idx(lap, p){ let lo = 0, hi = lap.p.length - 1; while (lo < hi){ const m = (lo + hi) >> 1; if (lap.p[m] < p) lo = m + 1; else hi = m; } return lo; }
 function tAtP(lap, p){ const i = idx(lap, p); if (i === 0) return 0; const p0 = lap.p[i-1], p1 = lap.p[i]; return (i - 1 + (p1 > p0 ? Math.min(1, Math.max(0, (p - p0) / (p1 - p0))) : 0)) * D.dt; }
-function at(lap, tt){ tt = Math.max(0, Math.min(tt, lap.lap_time)); const n = lap.x.length, f = Math.min(tt / D.dt, n - 1), i = Math.floor(f), j = Math.min(i + 1, n - 1), a = f - i, L = arr => arr[i] * (1 - a) + arr[j] * a; return {x:L(lap.x), y:L(lap.y), v:L(lap.v), p:L(lap.p), i}; }
+function at(lap, tt){ tt = Math.max(0, Math.min(tt, lap.lap_time)); const n = lap.x.length, f = Math.min(tt / D.dt, n - 1), i = Math.floor(f), j = Math.min(i + 1, n - 1), a = f - i, L = arr => arr[i] * (1 - a) + arr[j] * a; return {x:L(lap.x), y:L(lap.y), v:L(lap.v), p:L(lap.p), th:L(lap.a), br:L(lap.b), i}; }
+function posAtP(lap, p){ const n = lap.p.length; p = Math.max(lap.p[0], Math.min(p, lap.p[n-1])); const i = Math.max(1, idx(lap, p)), p0 = lap.p[i-1], p1 = lap.p[i], f = p1 > p0 ? (p - p0) / (p1 - p0) : 0; return {x:lap.x[i-1] + (lap.x[i] - lap.x[i-1]) * f, y:lap.y[i-1] + (lap.y[i] - lap.y[i-1]) * f}; }
 const rng = () => sec ? [sec.a, sec.b] : [0, D.L];
+const camK = () => $("cam").value;
 function absT(k){ return sec ? tAtP(D.laps[k], sec.a) + t : t; }
 function secTime(k, s){ const lap = D.laps[k], pe = lap.p[lap.p.length - 1]; return tAtP(lap, Math.min(s.b, pe)) - tAtP(lap, s.a); }
 function tRange(){ if (!sec) return [0, Math.max(...ORDER.map(k => D.laps[k].lap_time))]; return [-1.5, Math.max(...ORDER.map(k => secTime(k, sec))) + 1.0]; }
+function states(){ const ck = camK(), st = {}; st[ck] = at(D.laps[ck], absT(ck)); const same = $("mode").value === "place" && $("view").value === "chase";
+  for (const k of ORDER){ if (k === ck) continue; st[k] = same ? at(D.laps[k], tAtP(D.laps[k], st[ck].p)) : at(D.laps[k], absT(k)); } return st; }
 
-// ---- view
-function fit(){ const T = D.track, [a, b] = rng(); let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+// ---- 2D map
+function fit(){ const [a, b] = rng(); let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
   for (let i = 0; i < T.s.length; i++){ if (T.s[i] < a || T.s[i] > b) continue; for (const [x, y] of [[T.xl[i], T.yl[i]], [T.xr[i], T.yr[i]]]){ x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } }
   V.cx = (x0 + x1) / 2; V.cy = (y0 + y1) / 2; V.ext = Math.max(x1 - x0, y1 - y0, 60) * 1.15; V.zoom = 1; }
-const S = () => Math.min(cv.width, cv.height) * 0.86 / V.ext * V.zoom;
-const KZ = () => $("hmode").value === "speed" ? parseFloat($("hs").value) * V.ext / 300 : 0;
-function P(x, y, z){ const dx = x - V.cx, dy = y - V.cy, s = S();
-  if (!V.is3d) return [cv.width / 2 + dx * s, cv.height / 2 - dy * s];
-  const cy_ = Math.cos(V.yaw), sy = Math.sin(V.yaw), rx = dx * cy_ - dy * sy, ry = dx * sy + dy * cy_, cp = Math.cos(V.pitch), sp = Math.sin(V.pitch);
-  const up = z * cp + ry * sp, dep = ry * cp - z * sp, f = s / Math.max(0.25, 1 + dep / (V.ext * 2.2));
-  return [cv.width / 2 + rx * f, cv.height * 0.56 - up * f]; }
+const S2 = () => Math.min(cv.width, cv.height) * 0.86 / V.ext * V.zoom;
+const P2 = (x, y) => [cv.width / 2 + (x - V.cx) * S2(), cv.height / 2 - (y - V.cy) * S2()];
+function line2(xs, ys, i0, i1, step, c, w, al){ ctx.beginPath(); for (let i = i0; i <= i1; i += step){ const [X, Y] = P2(xs[i], ys[i]); i === i0 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y); } ctx.strokeStyle = c; ctx.lineWidth = w; ctx.globalAlpha = al; ctx.stroke(); ctx.globalAlpha = 1; }
+function draw2d(st){ ctx.fillStyle = "#fafafa"; ctx.fillRect(0, 0, cv.width, cv.height); const [a, b] = rng();
+  line2(T.xl, T.yl, 0, T.s.length - 1, 3, "#9a9a9a", 1.3, 1); line2(T.xr, T.yr, 0, T.s.length - 1, 3, "#9a9a9a", 1.3, 1);
+  ctx.fillStyle = "#666"; ctx.font = "11px sans-serif"; ctx.textAlign = "left"; D.zones.forEach(z => { const [X, Y] = P2(z.x, z.y); if (X > 0 && X < cv.width - 60) ctx.fillText(z.name, X + 6, Y - 6); });
+  for (const k of ORDER){ if (!on[k]) continue; const lap = D.laps[k], s = st[k], i0 = sec ? idx(lap, a) : 0, i1 = sec ? Math.min(idx(lap, b), lap.p.length - 1) : lap.p.length - 1;
+    if (sec) line2(lap.x, lap.y, i0, i1, 1, COL[k], 1.3, 0.45);
+    if ($("trail").checked) line2(lap.x, lap.y, Math.max(i0, s.i - 50), Math.max(i0, s.i), 1, COL[k], 3.2, 0.95); }
+  for (const k of ORDER){ if (!on[k]) continue; const s = st[k], [X, Y] = P2(s.x, s.y); ctx.beginPath(); ctx.arc(X, Y, k === "driver" ? 7 : 6, 0, 6.2832); ctx.fillStyle = COL[k]; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke(); } }
 
-function edge(xs, ys, c, w){ ctx.beginPath(); for (let i = 0; i < xs.length; i++){ const [X, Y] = P(xs[i], ys[i], 0); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.strokeStyle = c; ctx.lineWidth = w; ctx.stroke(); }
-function pathLap(lap, i0, i1, c, w, al){ const kz = KZ(); ctx.beginPath(); for (let i = i0; i <= i1; i++){ const [X, Y] = P(lap.x[i], lap.y[i], lap.v[i] * kz); i === i0 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y); } ctx.strokeStyle = c; ctx.lineWidth = w; ctx.globalAlpha = al; ctx.stroke(); ctx.globalAlpha = 1; }
+// ---- 3D chase camera (own small renderer: perspective projection, near-plane clipping, painter's order)
+const NEAR = 0.8, FPX = 600;
+let C = null, BB = null;
+function setCam(st){ const lap = D.laps[camK()], s = st[camK()], q = posAtP(lap, s.p), a = posAtP(lap, s.p - 6), b = posAtP(lap, s.p + 10), psi0 = Math.atan2(b.y - a.y, b.x - a.x);
+  const ang = psi0 + CAM.phi, cx = q.x - CAM.back * Math.cos(ang), cy = q.y - CAM.back * Math.sin(ang), tx = q.x + 10 * Math.cos(psi0), ty = q.y + 10 * Math.sin(psi0), tz = 0.8;
+  const dh = Math.hypot(tx - cx, ty - cy), yaw = Math.atan2(ty - cy, tx - cx), pitch = Math.atan2(CAM.height - tz, Math.max(dh, 1));
+  C = {x:cx, y:cy, z:CAM.height, yaw, pitch, R:[Math.sin(yaw), -Math.cos(yaw), 0], U:[Math.cos(yaw) * Math.sin(pitch), Math.sin(yaw) * Math.sin(pitch), Math.cos(pitch)], F:[Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch)]}; }
+function toCam(x, y, z){ const dx = x - C.x, dy = y - C.y, dz = z - C.z; return [dx * C.R[0] + dy * C.R[1], dx * C.U[0] + dy * C.U[1] + dz * C.U[2], dx * C.F[0] + dy * C.F[1] + dz * C.F[2]]; }
+const scr = c => [cv.width / 2 + FPX * c[0] / c[2], cv.height * 0.5 - FPX * c[1] / c[2]];
+function clipPoly(pts){ const out = []; for (let i = 0; i < pts.length; i++){ const a = pts[i], b = pts[(i + 1) % pts.length], ia = a[2] >= NEAR, ib = b[2] >= NEAR;
+    if (ia) out.push(a); if (ia !== ib){ const f = (NEAR - a[2]) / (b[2] - a[2]); out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, NEAR]); } } return out; }
+function polyPath(pts){ ctx.beginPath(); pts.forEach((c, i) => { const [X, Y] = scr(c); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); }
+function polyline(cs, color, w, al){ ctx.beginPath(); let pen = false; for (let i = 0; i < cs.length - 1; i++){ let a = cs[i], b = cs[i + 1]; if (a[2] < NEAR && b[2] < NEAR){ pen = false; continue; }
+    if (a[2] < NEAR){ const f = (NEAR - a[2]) / (b[2] - a[2]); a = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, NEAR]; pen = false; } else if (b[2] < NEAR){ const f = (NEAR - a[2]) / (b[2] - a[2]); b = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, NEAR]; }
+    const [X1, Y1] = scr(a), [X2, Y2] = scr(b); if (!pen){ ctx.moveTo(X1, Y1); pen = true; } ctx.lineTo(X2, Y2); }
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.globalAlpha = al; ctx.lineJoin = "round"; ctx.stroke(); ctx.globalAlpha = 1; }
+const mix = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
+function carFaces(x, y, psi, col){ const L = 4.6, W = 1.9, z0 = 0.15, z1 = 1.3, cs = Math.cos(psi), sn = Math.sin(psi), f = [cs, sn], r = [sn, -cs];
+  const v = (a, b, z) => [x + f[0] * a * L / 2 + r[0] * b * W / 2, y + f[1] * a * L / 2 + r[1] * b * W / 2, z];
+  const bot = [v(1, 1, z0), v(1, -1, z0), v(-1, -1, z0), v(-1, 1, z0)], top = [v(0.55, 0.9, z1), v(0.55, -0.9, z1), v(-0.7, -0.9, z1), v(-0.7, 0.9, z1)];
+  const rgb = [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)], sh = k => "rgb(" + rgb.map(c => Math.round(c * k)).join(",") + ")";
+  return [[[bot[0], bot[1], top[1], top[0]], sh(0.85)], [[bot[3], bot[2], top[2], top[3]], sh(0.7)], [[bot[0], bot[3], top[3], top[0]], sh(0.6)], [[bot[1], bot[2], top[2], top[1]], sh(0.6)], [[top[0], top[1], top[2], top[3]], sh(1.0)]]; }
+function drawChase(st){ const W = cv.width, H = cv.height; setCam(st);
+  const yH = H * 0.5 - FPX * Math.tan(C.pitch), g = ctx.createLinearGradient(0, 0, 0, Math.max(40, yH)); g.addColorStop(0, "#9cc3e6"); g.addColorStop(1, "#dcebf7");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.fillStyle = "#8fb27d"; ctx.fillRect(0, Math.max(0, yH), W, H);
+  // the road: quads from far to near
+  const ps = st[camK()].p, i0 = Math.max(0, Math.floor((ps - 40) / 1.554)), i1 = Math.min(T.s.length - 1, Math.ceil((ps + 330) / 1.554));
+  const Lc = [], Rc = []; for (let i = i0; i <= i1; i++){ Lc.push(toCam(T.xl[i], T.yl[i], 0)); Rc.push(toCam(T.xr[i], T.yr[i], 0)); }
+  const asphalt = [74, 74, 78], haze = [205, 218, 230];
+  for (let k = Lc.length - 2; k >= 0; k--){ const q = clipPoly([Lc[k], Rc[k], Rc[k + 1], Lc[k + 1]]); if (q.length < 3) continue; const d = (q.reduce((a, c) => a + c[2], 0) / q.length), f = Math.min(1, Math.pow(d / 520, 1.1)), band = Math.floor((i0 + k) * 1.554 / 8) % 2;
+    const col = mix(band ? asphalt : [66, 66, 70], haze, f), cs = "rgb(" + col.join(",") + ")"; polyPath(q); ctx.fillStyle = cs; ctx.fill(); ctx.strokeStyle = cs; ctx.lineWidth = 1; ctx.stroke(); }
+  polyline(Lc, "#f2f2f2", 2.2, 0.9); polyline(Rc, "#f2f2f2", 2.2, 0.9);
+  // racing lines on the asphalt
+  if ($("trail").checked) for (const k of ORDER){ if (!on[k]) continue; const lap = D.laps[k], s = st[k], a = idx(lap, s.p - 25), b = Math.min(lap.p.length - 1, idx(lap, s.p + 160)), cs = []; for (let i = a; i <= b; i++) cs.push(toCam(lap.x[i], lap.y[i], 0.04)); polyline(cs, COL[k], k === "driver" ? 3.6 : 3, 0.95); }
+  // the cars: far to near
+  const cars = []; for (const k of ORDER){ if (!on[k]) continue; const lap = D.laps[k], s = st[k], a = posAtP(lap, s.p - 1.5), b = posAtP(lap, s.p + 1.5), psi = Math.atan2(b.y - a.y, b.x - a.x), c = toCam(s.x, s.y, 0.7); cars.push({k, s, psi, d:c[2]}); }
+  cars.sort((u, v) => v.d - u.d); let lab = 0;
+  for (const c of cars){ if (c.d < NEAR + 0.5) continue; const faces = carFaces(c.s.x, c.s.y, c.psi, COL[c.k]).map(([vs, col]) => [vs.map(p => toCam(p[0], p[1], p[2])), col]);
+    faces.sort((u, v) => v[0].reduce((a, p) => a + p[2], 0) - u[0].reduce((a, p) => a + p[2], 0));
+    for (const [cs, col] of faces){ const q = clipPoly(cs); if (q.length < 3) continue; polyPath(q); ctx.globalAlpha = 0.62; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = COL[c.k]; ctx.lineWidth = 2; ctx.stroke(); }
+    const top = scr(toCam(c.s.x, c.s.y, 6.5)), foot = scr(toCam(c.s.x, c.s.y, 0.3)); ctx.beginPath(); ctx.moveTo(foot[0], foot[1]); ctx.lineTo(top[0], top[1]); ctx.strokeStyle = COL[c.k]; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(top[0], top[1], 5, 0, 6.2832); ctx.fillStyle = COL[c.k]; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; const ly = top[1] - 9 - ORDER.indexOf(c.k) * 13; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.strokeText(SHORT[c.k], top[0], ly); ctx.fillStyle = "#111"; ctx.fillText(SHORT[c.k], top[0], ly); }
+  // heads-up display: speed, brake, throttle and the line against the driver's run, for each lap
+  const hx = 8, hy = H - 8 - 5 * 18 - 8, dlap = D.laps.driver; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.fillRect(hx, hy, 470, 5 * 18 + 8);
+  ctx.font = "10px sans-serif"; ctx.fillStyle = "#555"; ctx.fillText("speed", 175, hy + 13); ctx.fillText("brake", 236, hy + 13); ctx.fillText("throttle", 300, hy + 13); ctx.fillText("line vs driver (+ left)", 362, hy + 13);
+  ORDER.forEach((k, r) => { const y = hy + 13 + (r + 1) * 18 - 2, s = st[k]; ctx.fillStyle = COL[k]; ctx.beginPath(); ctx.arc(20, y - 4, 5, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = on[k] ? "#111" : "#999"; ctx.font = (k === camK() ? "bold " : "") + "11.5px sans-serif"; ctx.fillText(SHORT[k] + (k === camK() ? "  (camera)" : ""), 31, y); ctx.font = "11.5px sans-serif";
+    ctx.fillText((s.v * 3.6).toFixed(0) + " km/h", 175, y); ctx.fillStyle = "#ddd"; ctx.fillRect(236, y - 9, 52, 8); ctx.fillRect(300, y - 9, 52, 8); ctx.fillStyle = "#c0392b"; ctx.fillRect(236, y - 9, 52 * Math.min(1, s.br), 8); ctx.fillStyle = "#1e8449"; ctx.fillRect(300, y - 9, 52 * Math.min(1, s.th), 8);
+    const d0 = posAtP(dlap, s.p), d1 = posAtP(dlap, s.p + 2), hd = Math.atan2(d1.y - d0.y, d1.x - d0.x), off = -(s.x - d0.x) * Math.sin(hd) + (s.y - d0.y) * Math.cos(hd);
+    ctx.fillStyle = "#111"; ctx.fillText(k === "driver" ? "(reference)" : (off >= 0 ? "+" : "") + off.toFixed(2) + " m", 362, y); });
+  // mini map
+  const mw = 210, mh = 150, mx = W - mw - 8, my = 8; ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(mx, my, mw, mh);
+  if (!BB){ let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (let i = 0; i < T.s.length; i++){ x0 = Math.min(x0, T.xl[i]); x1 = Math.max(x1, T.xl[i]); y0 = Math.min(y0, T.yl[i]); y1 = Math.max(y1, T.yl[i]); } BB = [x0, x1, y0, y1]; }
+  const [bx0, bx1, by0, by1] = BB, sc = Math.min((mw - 16) / (bx1 - bx0), (mh - 16) / (by1 - by0)), mp = (x, y) => [mx + 8 + (x - bx0) * sc, my + mh - 8 - (y - by0) * sc];
+  ctx.beginPath(); for (let i = 0; i < T.s.length; i += 4){ const [X, Y] = mp(T.xl[i], T.yl[i]); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); } ctx.strokeStyle = "#888"; ctx.lineWidth = 1.2; ctx.stroke();
+  for (const k of ORDER){ if (!on[k]) continue; const [X, Y] = mp(st[k].x, st[k].y); ctx.beginPath(); ctx.arc(X, Y, k === camK() ? 4.5 : 3.5, 0, 6.2832); ctx.fillStyle = COL[k]; ctx.fill(); if (k === camK()){ ctx.strokeStyle = "#000"; ctx.lineWidth = 1.2; ctx.stroke(); } } }
 
 // ---- speed traces
 function niceStep(r){ const raw = r / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
@@ -109,60 +174,51 @@ function traces(st){ const [a, b] = rng(), j0 = Math.floor(a / D.gs), j1 = Math.
   gctx.strokeStyle = "#555"; gctx.beginPath(); gctx.moveTo(Q.X(a), Q.Y(0)); gctx.lineTo(Q.X(b), Q.Y(0)); gctx.stroke();
   for (const k of ORDER){ if (k === "driver" || !on[k]) continue; const b0 = sec ? D.gt[k][jb] : 0; gctx.beginPath(); for (let j = j0; j <= j1; j++){ const X = Q.X(j * D.gs), Y = Q.Y(D.gt[k][j] - b0); j === j0 ? gctx.moveTo(X, Y) : gctx.lineTo(X, Y); } gctx.strokeStyle = COL[k]; gctx.lineWidth = 1.5; gctx.stroke(); const s = st[k]; if (s.p >= a && s.p <= b){ const j = Math.min(D.gn - 1, Math.round(s.p / D.gs)); gctx.beginPath(); gctx.arc(Q.X(s.p), Q.Y(D.gt[k][j] - b0), 4, 0, 6.2832); gctx.fillStyle = COL[k]; gctx.fill(); } } }
 
-// ---- drawing
-function draw(){ ctx.clearRect(0, 0, cv.width, cv.height); const T = D.track, [a, b] = rng(), kz = KZ();
-  edge(T.xl, T.yl, "#9a9a9a", 1.3); edge(T.xr, T.yr, "#9a9a9a", 1.3);
-  ctx.fillStyle = "#666"; ctx.font = "11px sans-serif"; ctx.textAlign = "left"; D.zones.forEach(z => { const [X, Y] = P(z.x, z.y, 0); if (X > 0 && X < cv.width - 60) ctx.fillText(z.name, X + 6, Y - 6); });
-  const st = {}; for (const k of ORDER) st[k] = at(D.laps[k], absT(k));
-  for (const k of ORDER){ if (!on[k]) continue; const lap = D.laps[k], s = st[k], i0 = sec ? idx(lap, a) : 0, i1 = sec ? Math.min(idx(lap, b), lap.p.length - 1) : lap.p.length - 1;
-    if (V.is3d || sec) pathLap(lap, i0, i1, COL[k], 1.3, 0.42);
-    if ($("trail").checked) pathLap(lap, Math.max(i0, s.i - 50), Math.max(i0, s.i), COL[k], 3.2, 0.95); }
-  for (const k of ORDER){ if (!on[k]) continue; const s = st[k], [X, Y] = P(s.x, s.y, s.v * kz);
-    if (V.is3d && kz > 0){ const [X0, Y0] = P(s.x, s.y, 0); ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X, Y); ctx.strokeStyle = COL[k]; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1; }
-    ctx.beginPath(); ctx.arc(X, Y, k === "driver" ? 7 : 6, 0, 6.2832); ctx.fillStyle = COL[k]; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke(); }
-  const dl = D.laps.driver;
+// ---- drawing + panels
+function draw(){ const st = states(), chase = $("view").value === "chase"; if (chase) drawChase(st); else draw2d(st);
+  const dl = D.laps.driver, place = $("mode").value === "place" && chase; $("hd_a").textContent = place ? "speed vs driver" : "ahead";
   for (const k of ORDER){ const s = st[k], lap = D.laps[k]; $("v_" + k).textContent = (s.v * 3.6).toFixed(0) + " km/h";
     let g = tAtP(lap, s.p) - tAtP(dl, s.p); if (sec) g -= tAtP(lap, sec.a) - tAtP(dl, sec.a);
     $("g_" + k).innerHTML = k === "driver" ? "" : `<span class="${g < 0 ? "neg" : "pos"}">${g >= 0 ? "+" : ""}${g.toFixed(2)} s</span>`;
-    const ah = s.p - st.driver.p; $("a_" + k).innerHTML = k === "driver" ? "" : `<span class="${ah > 0 ? "neg" : "pos"}">${ah >= 0 ? "+" : ""}${ah.toFixed(1)} m</span>`; }
+    if (k === "driver"){ $("a_" + k).innerHTML = ""; continue; }
+    if (place){ const dv = (s.v - at(dl, tAtP(dl, s.p)).v) * 3.6; $("a_" + k).innerHTML = `<span class="${dv > 0 ? "neg" : "pos"}">${dv >= 0 ? "+" : ""}${dv.toFixed(1)} km/h</span>`; }
+    else { const ah = s.p - st.driver.p; $("a_" + k).innerHTML = `<span class="${ah > 0 ? "neg" : "pos"}">${ah >= 0 ? "+" : ""}${ah.toFixed(1)} m</span>`; } }
   $("clock").textContent = sec ? `${sec.name}: ${t.toFixed(1)} s after the entry` : `t = ${t.toFixed(1)} s`;
   const [t0, t1] = tRange(); $("scrub").value = Math.round(1000 * (t - t0) / (t1 - t0));
   traces(st); }
-
-// ---- panels
-function build(){ D = DATA[$("drv").value];
-  const dt = D.dt; D.gs = 5; D.gn = Math.floor(D.L / D.gs) + 1; D.gv = {};
+function build(){ D = DATA.drivers[$("drv").value];
+  D.gs = 5; D.gn = Math.floor(D.L / D.gs) + 1; D.gv = {}; D.gt = {};
   for (const k of ORDER){ const lap = D.laps[k], arr = []; for (let j = 0; j < D.gn; j++){ const p = j * D.gs, i = idx(lap, p); arr.push(i === 0 ? lap.v[0] : lap.v[i - 1] + (lap.v[i] - lap.v[i - 1]) * (lap.p[i] > lap.p[i - 1] ? Math.min(1, Math.max(0, (p - lap.p[i - 1]) / (lap.p[i] - lap.p[i - 1]))) : 0)); } D.gv[k] = arr; }
-  D.gt = {}; for (const k of ORDER){ const lap = D.laps[k]; D.gt[k] = []; for (let j = 0; j < D.gn; j++) D.gt[k].push(tAtP(lap, j * D.gs) - tAtP(D.laps.driver, j * D.gs)); }
-  $("tab").innerHTML = "<tr><th>lap</th><th>lap time</th><th>D</th><th>speed</th><th>gap</th><th>ahead</th></tr>" + ORDER.map(k => `<tr><td><input type="checkbox" data-k="${k}" ${on[k] ? "checked" : ""}><span class="sw" style="background:${COL[k]}"></span>${NAME[k]}</td><td>${D.laps[k].lap_time.toFixed(2)} s</td><td>${D.laps[k].D.toFixed(2)}</td><td id="v_${k}"></td><td id="g_${k}"></td><td id="a_${k}"></td></tr>`).join("");
+  for (const k of ORDER){ const lap = D.laps[k]; D.gt[k] = []; for (let j = 0; j < D.gn; j++) D.gt[k].push(tAtP(lap, j * D.gs) - tAtP(D.laps.driver, j * D.gs)); }
+  $("tab").innerHTML = "<tr><th>lap</th><th>lap time</th><th>D</th><th>speed</th><th>gap</th><th id='hd_a'>ahead</th></tr>" + ORDER.map(k => `<tr><td><input type="checkbox" data-k="${k}" ${on[k] ? "checked" : ""}><span class="sw" style="background:${COL[k]}"></span>${NAME[k]}</td><td>${D.laps[k].lap_time.toFixed(2)} s</td><td>${D.laps[k].D.toFixed(2)}</td><td id="v_${k}"></td><td id="g_${k}"></td><td id="a_${k}"></td></tr>`).join("");
   $("tab").querySelectorAll("input").forEach(c => c.onchange = () => { on[c.dataset.k] = c.checked; draw(); });
   const rows = [{name:"whole lap", a:0, b:D.L, kind:"all"}].concat(D.sectors);
-  $("sectab").innerHTML = "<tr><th>sector</th><th>m</th><th>driver</th>" + ["small","keep","fast"].map(k => `<th style="color:${COL[k]}">${NAME[k].replace("RL lap, ", "").replace("RL ", "")}</th>`).join("") + "</tr>" +
+  $("sectab").innerHTML = "<tr><th>sector</th><th>m</th><th>driver</th>" + ["small","keep","fast"].map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
     rows.map((s, i) => { const tt = {}; for (const k of ORDER) tt[k] = s.kind === "all" ? D.laps[k].lap_time : secTime(k, s);
       return `<tr class="row" data-i="${i - 1}"><td>${s.name}</td><td>${Math.round(s.a)}-${Math.round(s.b)}</td><td>${tt.driver.toFixed(2)}</td>` + ["small","keep","fast"].map(k => { const d = tt[k] - tt.driver; return `<td class="${d < 0 ? "neg" : "pos"}">${d >= 0 ? "+" : ""}${d.toFixed(2)}</td>`; }).join("") + "</tr>"; }).join("");
   $("sectab").querySelectorAll("tr.row").forEach(r => r.onclick = () => { $("sec").value = r.dataset.i; setSector(); });
   $("sec").innerHTML = "<option value='-1'>whole lap</option>" + D.sectors.map((s, i) => `<option value='${i}'>${s.name}  (${Math.round(s.a)}-${Math.round(s.b)} m)</option>`).join("");
-  const S_ = D.style; $("sty").innerHTML = "<tr><th>number</th><th>target</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${NAME[k].replace("RL lap, ", "").replace("RL ", "").replace("driver's run", "driver")}</th>`).join("") + "</tr>" +
-    S_.keys.map((key, i) => `<tr><td>${key}</td><td>${S_.target[i].toFixed(2)}</td>` + ORDER.map(k => { const v = S_.vals[k][i], d = (v - S_.target[i]) / S_.spread[i]; return `<td>${v.toFixed(2)} <span class="${Math.abs(d) > 1 ? "pos" : ""}" style="font-size:11px">(${d >= 0 ? "+" : ""}${d.toFixed(1)})</span></td>`; }).join("") + "</tr>").join("") +
+  const S_ = D.style; $("sty").innerHTML = "<tr><th>number</th><th>target</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
+    S_.keys.map((key, i) => `<tr><td title="${key}">${S_.plain[i]}</td><td>${S_.target[i].toFixed(2)}</td>` + ORDER.map(k => { const v = S_.vals[k][i], d = (v - S_.target[i]) / S_.spread[i]; return `<td>${v.toFixed(2)} <span class="${Math.abs(d) > 1 ? "pos" : ""}" style="font-size:11px">(${d >= 0 ? "+" : ""}${d.toFixed(1)})</span></td>`; }).join("") + "</tr>").join("") +
     `<tr><td><b>D (all 12)</b></td><td>0</td>` + ORDER.map(k => `<td><b>${D.laps[k].D.toFixed(2)}</b></td>`).join("") + "</tr>";
   sec = null; $("sec").value = "-1"; fit(); t = 0; draw(); }
-function setSector(){ const i = parseInt($("sec").value); sec = i < 0 ? null : D.sectors[i]; document.querySelectorAll("#sectab tr.row").forEach(r => r.classList.toggle("sel", parseInt(r.dataset.i) === i)); fit(); t = tRange()[0]; if (!sec) t = 0; draw(); }
-function setView(){ V.is3d = $("view").value === "3d"; $("hl").style.display = V.is3d ? "" : "none"; $("hint").textContent = V.is3d ? "drag = turn, wheel = zoom, double-click = reset" : "drag = move, wheel = zoom, double-click = reset"; draw(); }
+function setSector(){ const i = parseInt($("sec").value); sec = i < 0 ? null : D.sectors[i]; document.querySelectorAll("#sectab tr.row").forEach(r => r.classList.toggle("sel", parseInt(r.dataset.i) === i)); fit(); t = sec ? tRange()[0] : 0; draw(); }
+function setView(){ const chase = $("view").value === "chase"; $("camlab").style.display = $("modelab").style.display = chase ? "" : "none"; $("hint").textContent = chase ? "drag = look around the car, wheel = closer / further, double-click = reset the camera" : "drag = move, wheel = zoom, double-click = reset"; draw(); }
 
 // ---- interaction
 let drag = null;
 cv.onmousedown = e => { drag = {x:e.clientX, y:e.clientY}; cv.style.cursor = "grabbing"; };
 window.onmouseup = () => { drag = null; cv.style.cursor = "grab"; };
 window.onmousemove = e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag = {x:e.clientX, y:e.clientY};
-  if (V.is3d){ V.yaw += dx * 0.008; V.pitch = Math.max(0.1, Math.min(1.5708, V.pitch + dy * 0.008)); } else { V.cx -= dx / S(); V.cy += dy / S(); } draw(); };
-cv.onwheel = e => { e.preventDefault(); V.zoom = Math.max(0.4, Math.min(40, V.zoom * Math.exp(-e.deltaY * 0.0012))); draw(); };
-cv.ondblclick = () => { fit(); V.yaw = 0.55; V.pitch = 0.95; draw(); };
+  if ($("view").value === "chase"){ CAM.phi = Math.max(-3.14, Math.min(3.14, CAM.phi - dx * 0.008)); CAM.height = Math.max(1.2, Math.min(60, CAM.height + dy * 0.06)); } else { V.cx -= dx / S2(); V.cy += dy / S2(); } draw(); };
+cv.onwheel = e => { e.preventDefault(); if ($("view").value === "chase") CAM.back = Math.max(4, Math.min(90, CAM.back * Math.exp(e.deltaY * 0.0012))); else V.zoom = Math.max(0.4, Math.min(40, V.zoom * Math.exp(-e.deltaY * 0.0012))); draw(); };
+cv.ondblclick = () => { fit(); CAM.phi = 0; CAM.back = 13; CAM.height = 4.0; draw(); };
 function loop(ts){ if (!playing) return; const [t0, t1] = tRange(); if (last !== null) t += (ts - last) / 1000 * parseFloat($("rate").value); last = ts;
   if (t >= t1){ if (sec){ t = t0; } else { t = t1; playing = false; $("play").textContent = "Play"; } } draw(); requestAnimationFrame(loop); }
 $("play").onclick = () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; if (playing){ const [t0, t1] = tRange(); if (t >= t1) t = t0; last = null; requestAnimationFrame(loop); } };
 $("scrub").oninput = () => { const [t0, t1] = tRange(); t = t0 + $("scrub").value / 1000 * (t1 - t0); draw(); };
-$("drv").onchange = build; $("view").onchange = setView; $("sec").onchange = setSector; $("trail").onchange = draw; $("hmode").onchange = draw; $("hs").oninput = draw;
+$("drv").onchange = build; $("view").onchange = setView; $("sec").onchange = setSector; $("trail").onchange = draw; $("cam").onchange = draw; $("mode").onchange = draw;
 build(); setView();
 const H = Object.fromEntries(location.hash.slice(1).split("&").filter(Boolean).map(p => p.split("=")));
-if (H.d){ $("drv").value = H.d; build(); } if (H.v){ $("view").value = H.v; setView(); } if (H.s){ $("sec").value = H.s; setSector(); } if (H.t){ t = parseFloat(H.t); draw(); } if (H.hs){ $("hs").value = H.hs; draw(); }
+if (H.d){ $("drv").value = H.d; build(); } if (H.v){ $("view").value = H.v; setView(); } if (H.c){ $("cam").value = H.c; } if (H.m){ $("mode").value = H.m; } if (H.s){ $("sec").value = H.s; setSector(); } if (H.phi){ CAM.phi = parseFloat(H.phi); } if (H.back){ CAM.back = parseFloat(H.back); } if (H.h){ CAM.height = parseFloat(H.h); } if (H.t){ t = parseFloat(H.t); } draw();
 </script></body></html>
