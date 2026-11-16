@@ -1,0 +1,421 @@
+{
+ "attacker": {
+  "sections": [
+   {
+    "heading": "The laps",
+    "items": [
+     {
+      "text": "The driver's run takes 119.80 s. The RL lap that keeps the driver's style within its budget takes 116.52 s, 3.28 s faster. Everything below compares the driver's run with this RL lap.",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "Where the time is gained",
+    "items": [
+     {
+      "text": "Biggest gains: C2 T3-6 (1970-3032 m) 0.95 s faster (27.75 s to 26.80 s); C1 T1-2 (770-1122 m) 0.87 s faster (13.74 s to 12.86 s); C4 T10 (4939-5559 m) 0.70 s faster (13.22 s to 12.52 s); C3 T7-9 (3763-4295 m) 0.50 s faster (12.28 s to 11.78 s); S1 (1122-1970 m) 0.22 s faster (14.76 s to 14.54 s).",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The straights together change by -0.27 s; the corner zones by -3.02 s. In the corner zones the two lines are 0.5 m apart on average (at most 2.0 m): the time comes mostly from braking and speed, not from a different line.",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "Corner by corner (click a line to see the corner)",
+    "items": [
+     {
+      "text": "T1: the RL lap starts braking 26 m earlier (218 m before the apex, the driver's run 192 m), carries more speed through the corner (lowest speed 16.6 against 14.0 m/s), is back on the throttle 13 m earlier, is faster 80 m after the apex (23.3 against 21.8 m/s). (zone C1 T1-2: -0.87 s)",
+      "bullet": true,
+      "corner": 1,
+      "zone": "C1 T1-2",
+      "apex": 928.1349186738136
+     },
+     {
+      "text": "T2: same low point as T1, no other clear difference.",
+      "bullet": true,
+      "corner": 2,
+      "zone": "C1 T1-2",
+      "apex": 970.1410249068956
+     },
+     {
+      "text": "T3: the RL lap starts braking 23 m earlier (195 m before the apex, the driver's run 172 m), carries more speed through the corner (lowest speed 22.4 against 20.5 m/s). (zone C2 T3-6: -0.95 s)",
+      "bullet": true,
+      "corner": 3,
+      "zone": "C2 T3-6",
+      "apex": 2132.3099640221667
+     },
+     {
+      "text": "T4: the RL lap carries more speed through the corner (lowest speed 22.6 against 20.7 m/s), is slower 80 m after the apex (35.9 against 39.4 m/s). (zone C2 T3-6: -0.95 s)",
+      "bullet": true,
+      "corner": 4,
+      "zone": "C2 T3-6",
+      "apex": 2178.3166518012563
+     },
+     {
+      "text": "T5: the RL lap starts braking 9 m later (102 m before the apex, the driver's run 112 m), presses the brake less hard (peak 0.80 against 1.00), carries more speed through the corner (lowest speed 38.4 against 35.4 m/s), is back on the throttle 49 m earlier, is faster 80 m after the apex (43.8 against 39.3 m/s). (zone C2 T3-6: -0.95 s)",
+      "bullet": true,
+      "corner": 5,
+      "zone": "C2 T3-6",
+      "apex": 2536.368700168956
+     },
+     {
+      "text": "T6: the RL lap starts braking 9 m earlier (103 m before the apex, the driver's run 94 m), carries more speed through the corner (lowest speed 34.9 against 32.7 m/s), is back on the throttle 11 m earlier. (zone C2 T3-6: -0.95 s)",
+      "bullet": true,
+      "corner": 6,
+      "zone": "C2 T3-6",
+      "apex": 2858.4155146225853
+     },
+     {
+      "text": "T7: the RL lap carries more speed through the corner (lowest speed 35.6 against 29.2 m/s). (zone C3 T7-9: -0.50 s)",
+      "bullet": true,
+      "corner": 7,
+      "zone": "C3 T7-9",
+      "apex": 3930.57136895268
+     },
+     {
+      "text": "T10: the RL lap carries more speed through the corner (lowest speed 41.7 against 37.6 m/s), is back on the throttle 78 m earlier, is faster 80 m after the apex (44.1 against 40.8 m/s). (zone C4 T10: -0.70 s)",
+      "bullet": true,
+      "corner": 10,
+      "zone": "C4 T10",
+      "apex": 5172.751938988107
+     },
+     {
+      "text": "No clear difference in: T8, T9.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "The style (the 12 style numbers of the whole lap)",
+    "items": [
+     {
+      "text": "Steering corrections: 7.99 to 18.94 per km (+10.95): the RL lap corrects the steering more often.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Peak brake pressure: 0.98 to 0.84 on the 0-1 pedal scale (-0.13): the RL lap hits a lower peak brake pressure in each braking zone.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Hand speed: 16.01 to 25.15 deg per s (+9.14): the RL lap turns the wheel faster (busier hands).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Brake pressure: 0.68 to 0.56 on the 0-1 pedal scale (-0.12): the RL lap presses the brake more lightly while braking.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Brake attack (how fast it is applied): 6.26 to 8.85 pedal per s (+2.60): the RL lap stamps the brake on faster.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Throttle attack: 1.06 to 0.72 pedal per s (-0.34): the RL lap gets on the throttle more progressively.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Distance to the track edge: 2.20 to 2.51 m (+0.31): the RL lap stays further from the track edge on average.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Brake release: 0.62 to 1.00 pedal per s (+0.37): the RL lap lets the brake off faster.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Throttle lift: 1.77 to 1.60 pedal per s (-0.17): the RL lap lifts off the throttle more gradually.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Practically unchanged: Peak steering in corners (66.11 to 67.15 deg); Apex distance (1.68 to 1.61 m); Exit width (4.04 to 4.01 m).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "What the data cannot say",
+    "items": [
+     {
+      "text": "All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The data shows what differs, not why it makes the car faster.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   }
+  ],
+  "markdown": "# Coaching brief: attacker\n\n## The laps\nThe driver's run takes 119.80 s. The RL lap that keeps the driver's style within its budget takes 116.52 s, 3.28 s faster. Everything below compares the driver's run with this RL lap.\n\n## Where the time is gained\nBiggest gains: C2 T3-6 (1970-3032 m) 0.95 s faster (27.75 s to 26.80 s); C1 T1-2 (770-1122 m) 0.87 s faster (13.74 s to 12.86 s); C4 T10 (4939-5559 m) 0.70 s faster (13.22 s to 12.52 s); C3 T7-9 (3763-4295 m) 0.50 s faster (12.28 s to 11.78 s); S1 (1122-1970 m) 0.22 s faster (14.76 s to 14.54 s).\nThe straights together change by -0.27 s; the corner zones by -3.02 s. In the corner zones the two lines are 0.5 m apart on average (at most 2.0 m): the time comes mostly from braking and speed, not from a different line.\n\n## Corner by corner\n- T1: the RL lap starts braking 26 m earlier (218 m before the apex, the driver's run 192 m), carries more speed through the corner (lowest speed 16.6 against 14.0 m/s), is back on the throttle 13 m earlier, is faster 80 m after the apex (23.3 against 21.8 m/s). (zone C1 T1-2: -0.87 s)\n- T2: same low point as T1, no other clear difference.\n- T3: the RL lap starts braking 23 m earlier (195 m before the apex, the driver's run 172 m), carries more speed through the corner (lowest speed 22.4 against 20.5 m/s). (zone C2 T3-6: -0.95 s)\n- T4: the RL lap carries more speed through the corner (lowest speed 22.6 against 20.7 m/s), is slower 80 m after the apex (35.9 against 39.4 m/s). (zone C2 T3-6: -0.95 s)\n- T5: the RL lap starts braking 9 m later (102 m before the apex, the driver's run 112 m), presses the brake less hard (peak 0.80 against 1.00), carries more speed through the corner (lowest speed 38.4 against 35.4 m/s), is back on the throttle 49 m earlier, is faster 80 m after the apex (43.8 against 39.3 m/s). (zone C2 T3-6: -0.95 s)\n- T6: the RL lap starts braking 9 m earlier (103 m before the apex, the driver's run 94 m), carries more speed through the corner (lowest speed 34.9 against 32.7 m/s), is back on the throttle 11 m earlier. (zone C2 T3-6: -0.95 s)\n- T7: the RL lap carries more speed through the corner (lowest speed 35.6 against 29.2 m/s). (zone C3 T7-9: -0.50 s)\n- T10: the RL lap carries more speed through the corner (lowest speed 41.7 against 37.6 m/s), is back on the throttle 78 m earlier, is faster 80 m after the apex (44.1 against 40.8 m/s). (zone C4 T10: -0.70 s)\n- No clear difference in: T8, T9.\n\n## The style (the 12 style numbers of the whole lap)\n- Steering corrections: 7.99 to 18.94 per km (+10.95): the RL lap corrects the steering more often.\n- Peak brake pressure: 0.98 to 0.84 on the 0-1 pedal scale (-0.13): the RL lap hits a lower peak brake pressure in each braking zone.\n- Hand speed: 16.01 to 25.15 deg per s (+9.14): the RL lap turns the wheel faster (busier hands).\n- Brake pressure: 0.68 to 0.56 on the 0-1 pedal scale (-0.12): the RL lap presses the brake more lightly while braking.\n- Brake attack (how fast it is applied): 6.26 to 8.85 pedal per s (+2.60): the RL lap stamps the brake on faster.\n- Throttle attack: 1.06 to 0.72 pedal per s (-0.34): the RL lap gets on the throttle more progressively.\n- Distance to the track edge: 2.20 to 2.51 m (+0.31): the RL lap stays further from the track edge on average.\n- Brake release: 0.62 to 1.00 pedal per s (+0.37): the RL lap lets the brake off faster.\n- Throttle lift: 1.77 to 1.60 pedal per s (-0.17): the RL lap lifts off the throttle more gradually.\n- Practically unchanged: Peak steering in corners (66.11 to 67.15 deg); Apex distance (1.68 to 1.61 m); Exit width (4.04 to 4.01 m).\n\n## What the data cannot say\n- All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).\n- The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).\n- The data shows what differs, not why it makes the car faster.\n",
+  "prompt": "# Prompt for the coaching LLM (example for the attacker)\n\n## System\nYou are a racing coach. You receive facts measured on two simulated laps of the same car on the same track: the driver's run, and an RL lap that is faster while keeping the driver's style\nwithin a budget. Coach the driver so that the driver's laps move toward the RL lap without losing the driver's style.\n\nRules:\n1. Use only the facts in the brief. Quote numbers exactly, with their units. Never invent a corner, a number or a cause.\n2. Coach per corner. Give at most three priorities, ordered by the time they are worth (the sector times are in the brief).\n3. For each priority say: what to change, by how much (the numbers), and what it is worth (seconds in that zone).\n4. Then list what to keep as it is (the style numbers that barely change).\n5. Say plainly what the data cannot tell you.\n6. Plain language, no jargon beyond the names used in the brief. At most 250 words.\n\n## Brief\n# Coaching brief: attacker\n\n## The laps\nThe driver's run takes 119.80 s. The RL lap that keeps the driver's style within its budget takes 116.52 s, 3.28 s faster. Everything below compares the driver's run with this RL lap.\n\n## Where the time is gained\nBiggest gains: C2 T3-6 (1970-3032 m) 0.95 s faster (27.75 s to 26.80 s); C1 T1-2 (770-1122 m) 0.87 s faster (13.74 s to 12.86 s); C4 T10 (4939-5559 m) 0.70 s faster (13.22 s to 12.52 s); C3 T7-9 (3763-4295 m) 0.50 s faster (12.28 s to 11.78 s); S1 (1122-1970 m) 0.22 s faster (14.76 s to 14.54 s).\nThe straights together change by -0.27 s; the corner zones by -3.02 s. In the corner zones the two lines are 0.5 m apart on average (at most 2.0 m): the time comes mostly from braking and speed, not from a different line.\n\n## Corner by corner\n- T1: the RL lap starts braking 26 m earlier (218 m before the apex, the driver's run 192 m), carries more speed through the corner (lowest speed 16.6 against 14.0 m/s), is back on the throttle 13 m earlier, is faster 80 m after the apex (23.3 against 21.8 m/s). (zone C1 T1-2: -0.87 s)\n- T2: same low point as T1, no other clear difference.\n- T3: the RL lap starts braking 23 m earlier (195 m before the apex, the driver's run 172 m), carries more speed through the corner (lowest speed 22.4 against 20.5 m/s). (zone C2 T3-6: -0.95 s)\n- T4: the RL lap carries more speed through the corner (lowest speed 22.6 against 20.7 m/s), is slower 80 m after the apex (35.9 against 39.4 m/s). (zone C2 T3-6: -0.95 s)\n- T5: the RL lap starts braking 9 m later (102 m before the apex, the driver's run 112 m), presses the brake less hard (peak 0.80 against 1.00), carries more speed through the corner (lowest speed 38.4 against 35.4 m/s), is back on the throttle 49 m earlier, is faster 80 m after the apex (43.8 against 39.3 m/s). (zone C2 T3-6: -0.95 s)\n- T6: the RL lap starts braking 9 m earlier (103 m before the apex, the driver's run 94 m), carries more speed through the corner (lowest speed 34.9 against 32.7 m/s), is back on the throttle 11 m earlier. (zone C2 T3-6: -0.95 s)\n- T7: the RL lap carries more speed through the corner (lowest speed 35.6 against 29.2 m/s). (zone C3 T7-9: -0.50 s)\n- T10: the RL lap carries more speed through the corner (lowest speed 41.7 against 37.6 m/s), is back on the throttle 78 m earlier, is faster 80 m after the apex (44.1 against 40.8 m/s). (zone C4 T10: -0.70 s)\n- No clear difference in: T8, T9.\n\n## The style (the 12 style numbers of the whole lap)\n- Steering corrections: 7.99 to 18.94 per km (+10.95): the RL lap corrects the steering more often.\n- Peak brake pressure: 0.98 to 0.84 on the 0-1 pedal scale (-0.13): the RL lap hits a lower peak brake pressure in each braking zone.\n- Hand speed: 16.01 to 25.15 deg per s (+9.14): the RL lap turns the wheel faster (busier hands).\n- Brake pressure: 0.68 to 0.56 on the 0-1 pedal scale (-0.12): the RL lap presses the brake more lightly while braking.\n- Brake attack (how fast it is applied): 6.26 to 8.85 pedal per s (+2.60): the RL lap stamps the brake on faster.\n- Throttle attack: 1.06 to 0.72 pedal per s (-0.34): the RL lap gets on the throttle more progressively.\n- Distance to the track edge: 2.20 to 2.51 m (+0.31): the RL lap stays further from the track edge on average.\n- Brake release: 0.62 to 1.00 pedal per s (+0.37): the RL lap lets the brake off faster.\n- Throttle lift: 1.77 to 1.60 pedal per s (-0.17): the RL lap lifts off the throttle more gradually.\n- Practically unchanged: Peak steering in corners (66.11 to 67.15 deg); Apex distance (1.68 to 1.61 m); Exit width (4.04 to 4.01 m).\n\n## What the data cannot say\n- All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).\n- The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).\n- The data shows what differs, not why it makes the car faster.\n\n## Task\nWrite the coaching message for the attacker driver.\n"
+ },
+ "smooth": {
+  "sections": [
+   {
+    "heading": "The laps",
+    "items": [
+     {
+      "text": "The driver's run takes 120.92 s. The RL lap that keeps the driver's style within its budget takes 117.36 s, 3.56 s faster. Everything below compares the driver's run with this RL lap.",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "Where the time is gained",
+    "items": [
+     {
+      "text": "Biggest gains: C1 T1-2 (770-1122 m) 0.96 s faster (13.67 s to 12.72 s); C2 T3-6 (1970-3032 m) 0.93 s faster (28.29 s to 27.36 s); C3 T7-9 (3763-4295 m) 0.65 s faster (12.40 s to 11.75 s); S0 (0-770 m) 0.38 s faster (12.30 s to 11.92 s); S1 (1122-1970 m) 0.38 s faster (14.91 s to 14.53 s); S3 (4295-4939 m) 0.24 s faster (10.75 s to 10.50 s).",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The straights together change by -0.99 s; the corner zones by -2.56 s. In the corner zones the two lines are 0.7 m apart on average (at most 1.8 m): the time comes mostly from braking and speed, not from a different line.",
+      "bullet": false,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "Corner by corner (click a line to see the corner)",
+    "items": [
+     {
+      "text": "T1: the RL lap starts braking 53 m later (213 m before the apex, the driver's run 266 m), is back on the throttle 44 m earlier, is faster 80 m after the apex (25.8 against 22.3 m/s). (zone C1 T1-2: -0.96 s)",
+      "bullet": true,
+      "corner": 1,
+      "zone": "C1 T1-2",
+      "apex": 928.1349186738136
+     },
+     {
+      "text": "T2: the RL lap presses the brake harder (peak 0.76 against 0.50), is faster 80 m after the apex (35.4 against 30.0 m/s), takes the apex 0.5 m closer to the inside. (zone C1 T1-2: -0.96 s)",
+      "bullet": true,
+      "corner": 2,
+      "zone": "C1 T1-2",
+      "apex": 970.1410249068956
+     },
+     {
+      "text": "T3: the RL lap starts braking 43 m later (189 m before the apex, the driver's run 231 m), carries less speed through the corner (lowest speed 21.4 against 23.5 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (29.3 against 27.8 m/s), takes the apex 0.5 m closer to the inside. (zone C2 T3-6: -0.93 s)",
+      "bullet": true,
+      "corner": 3,
+      "zone": "C2 T3-6",
+      "apex": 2132.3099640221667
+     },
+     {
+      "text": "T4: the RL lap carries less speed through the corner (lowest speed 22.1 against 24.0 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (37.2 against 33.5 m/s), takes the apex 0.4 m closer to the inside. (zone C2 T3-6: -0.93 s)",
+      "bullet": true,
+      "corner": 4,
+      "zone": "C2 T3-6",
+      "apex": 2178.3166518012563
+     },
+     {
+      "text": "T5: the RL lap presses the brake harder (peak 0.87 against 0.63), takes the apex 0.8 m closer to the inside. (zone C2 T3-6: -0.93 s)",
+      "bullet": true,
+      "corner": 5,
+      "zone": "C2 T3-6",
+      "apex": 2536.368700168956
+     },
+     {
+      "text": "T6: the RL lap starts braking 17 m later (95 m before the apex, the driver's run 112 m), is back on the throttle 18 m earlier, is faster 80 m after the apex (40.6 against 38.5 m/s), takes the apex 0.7 m closer to the inside. (zone C2 T3-6: -0.93 s)",
+      "bullet": true,
+      "corner": 6,
+      "zone": "C2 T3-6",
+      "apex": 2858.4155146225853
+     },
+     {
+      "text": "T7: the RL lap starts braking 31 m later (146 m before the apex, the driver's run 177 m), presses the brake less hard (peak 0.81 against 1.00), carries less speed through the corner (lowest speed 33.6 against 35.4 m/s), is back on the throttle 28 m earlier, is faster 80 m after the apex (41.9 against 39.6 m/s), takes the apex 0.4 m closer to the inside. (zone C3 T7-9: -0.65 s)",
+      "bullet": true,
+      "corner": 7,
+      "zone": "C3 T7-9",
+      "apex": 3930.57136895268
+     },
+     {
+      "text": "T8: the RL lap carries more speed through the corner (lowest speed 40.5 against 38.8 m/s), is faster 80 m after the apex (46.7 against 43.0 m/s), takes the apex 0.8 m wider. (zone C3 T7-9: -0.65 s)",
+      "bullet": true,
+      "corner": 8,
+      "zone": "C3 T7-9",
+      "apex": 4036.586779921888
+     },
+     {
+      "text": "T9: the RL lap carries more speed through the corner (lowest speed 44.1 against 41.4 m/s), is back on the throttle 10 m earlier, is faster 80 m after the apex (48.8 against 44.1 m/s), takes the apex 0.6 m closer to the inside. (zone C3 T7-9: -0.65 s)",
+      "bullet": true,
+      "corner": 9,
+      "zone": "C3 T7-9",
+      "apex": 4116.598410842043
+     },
+     {
+      "text": "T10: the RL lap starts braking 24 m later (174 m before the apex, the driver's run 197 m), is back on the throttle 17 m earlier, takes the apex 0.4 m wider. (zone C4 T10: -0.02 s)",
+      "bullet": true,
+      "corner": 10,
+      "zone": "C4 T10",
+      "apex": 5172.751938988107
+     }
+    ]
+   },
+   {
+    "heading": "The style (the 12 style numbers of the whole lap)",
+    "items": [
+     {
+      "text": "Brake attack (how fast it is applied): 13.47 to 3.03 pedal per s (-10.44): the RL lap applies the brake more progressively.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Steering corrections: 3.65 to 10.43 per km (+6.78): the RL lap corrects the steering more often.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Throttle attack: 0.47 to 0.78 pedal per s (+0.31): the RL lap gets on the throttle more abruptly.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Throttle lift: 2.18 to 1.85 pedal per s (-0.33): the RL lap lifts off the throttle more gradually.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Exit width: 3.92 to 4.35 m (+0.43): the RL lap stays further from the outside edge on the exit.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Brake pressure: 0.43 to 0.51 on the 0-1 pedal scale (+0.08): the RL lap presses the brake harder while braking.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Hand speed: 12.52 to 17.34 deg per s (+4.82): the RL lap turns the wheel faster (busier hands).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Apex distance: 2.05 to 1.76 m (-0.29): the RL lap gets closer to the inside edge at the apex.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Brake release: 0.47 to 0.74 pedal per s (+0.27): the RL lap lets the brake off faster.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "Practically unchanged: Peak brake pressure (0.75 to 0.79 on the 0-1 pedal scale); Distance to the track edge (2.52 to 2.48 m); Peak steering in corners (64.45 to 64.80 deg).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   },
+   {
+    "heading": "What the data cannot say",
+    "items": [
+     {
+      "text": "All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     },
+     {
+      "text": "The data shows what differs, not why it makes the car faster.",
+      "bullet": true,
+      "corner": null,
+      "zone": null,
+      "apex": null
+     }
+    ]
+   }
+  ],
+  "markdown": "# Coaching brief: smooth\n\n## The laps\nThe driver's run takes 120.92 s. The RL lap that keeps the driver's style within its budget takes 117.36 s, 3.56 s faster. Everything below compares the driver's run with this RL lap.\n\n## Where the time is gained\nBiggest gains: C1 T1-2 (770-1122 m) 0.96 s faster (13.67 s to 12.72 s); C2 T3-6 (1970-3032 m) 0.93 s faster (28.29 s to 27.36 s); C3 T7-9 (3763-4295 m) 0.65 s faster (12.40 s to 11.75 s); S0 (0-770 m) 0.38 s faster (12.30 s to 11.92 s); S1 (1122-1970 m) 0.38 s faster (14.91 s to 14.53 s); S3 (4295-4939 m) 0.24 s faster (10.75 s to 10.50 s).\nThe straights together change by -0.99 s; the corner zones by -2.56 s. In the corner zones the two lines are 0.7 m apart on average (at most 1.8 m): the time comes mostly from braking and speed, not from a different line.\n\n## Corner by corner\n- T1: the RL lap starts braking 53 m later (213 m before the apex, the driver's run 266 m), is back on the throttle 44 m earlier, is faster 80 m after the apex (25.8 against 22.3 m/s). (zone C1 T1-2: -0.96 s)\n- T2: the RL lap presses the brake harder (peak 0.76 against 0.50), is faster 80 m after the apex (35.4 against 30.0 m/s), takes the apex 0.5 m closer to the inside. (zone C1 T1-2: -0.96 s)\n- T3: the RL lap starts braking 43 m later (189 m before the apex, the driver's run 231 m), carries less speed through the corner (lowest speed 21.4 against 23.5 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (29.3 against 27.8 m/s), takes the apex 0.5 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T4: the RL lap carries less speed through the corner (lowest speed 22.1 against 24.0 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (37.2 against 33.5 m/s), takes the apex 0.4 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T5: the RL lap presses the brake harder (peak 0.87 against 0.63), takes the apex 0.8 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T6: the RL lap starts braking 17 m later (95 m before the apex, the driver's run 112 m), is back on the throttle 18 m earlier, is faster 80 m after the apex (40.6 against 38.5 m/s), takes the apex 0.7 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T7: the RL lap starts braking 31 m later (146 m before the apex, the driver's run 177 m), presses the brake less hard (peak 0.81 against 1.00), carries less speed through the corner (lowest speed 33.6 against 35.4 m/s), is back on the throttle 28 m earlier, is faster 80 m after the apex (41.9 against 39.6 m/s), takes the apex 0.4 m closer to the inside. (zone C3 T7-9: -0.65 s)\n- T8: the RL lap carries more speed through the corner (lowest speed 40.5 against 38.8 m/s), is faster 80 m after the apex (46.7 against 43.0 m/s), takes the apex 0.8 m wider. (zone C3 T7-9: -0.65 s)\n- T9: the RL lap carries more speed through the corner (lowest speed 44.1 against 41.4 m/s), is back on the throttle 10 m earlier, is faster 80 m after the apex (48.8 against 44.1 m/s), takes the apex 0.6 m closer to the inside. (zone C3 T7-9: -0.65 s)\n- T10: the RL lap starts braking 24 m later (174 m before the apex, the driver's run 197 m), is back on the throttle 17 m earlier, takes the apex 0.4 m wider. (zone C4 T10: -0.02 s)\n\n## The style (the 12 style numbers of the whole lap)\n- Brake attack (how fast it is applied): 13.47 to 3.03 pedal per s (-10.44): the RL lap applies the brake more progressively.\n- Steering corrections: 3.65 to 10.43 per km (+6.78): the RL lap corrects the steering more often.\n- Throttle attack: 0.47 to 0.78 pedal per s (+0.31): the RL lap gets on the throttle more abruptly.\n- Throttle lift: 2.18 to 1.85 pedal per s (-0.33): the RL lap lifts off the throttle more gradually.\n- Exit width: 3.92 to 4.35 m (+0.43): the RL lap stays further from the outside edge on the exit.\n- Brake pressure: 0.43 to 0.51 on the 0-1 pedal scale (+0.08): the RL lap presses the brake harder while braking.\n- Hand speed: 12.52 to 17.34 deg per s (+4.82): the RL lap turns the wheel faster (busier hands).\n- Apex distance: 2.05 to 1.76 m (-0.29): the RL lap gets closer to the inside edge at the apex.\n- Brake release: 0.47 to 0.74 pedal per s (+0.27): the RL lap lets the brake off faster.\n- Practically unchanged: Peak brake pressure (0.75 to 0.79 on the 0-1 pedal scale); Distance to the track edge (2.52 to 2.48 m); Peak steering in corners (64.45 to 64.80 deg).\n\n## What the data cannot say\n- All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).\n- The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).\n- The data shows what differs, not why it makes the car faster.\n",
+  "prompt": "# Prompt for the coaching LLM (example for the smooth)\n\n## System\nYou are a racing coach. You receive facts measured on two simulated laps of the same car on the same track: the driver's run, and an RL lap that is faster while keeping the driver's style\nwithin a budget. Coach the driver so that the driver's laps move toward the RL lap without losing the driver's style.\n\nRules:\n1. Use only the facts in the brief. Quote numbers exactly, with their units. Never invent a corner, a number or a cause.\n2. Coach per corner. Give at most three priorities, ordered by the time they are worth (the sector times are in the brief).\n3. For each priority say: what to change, by how much (the numbers), and what it is worth (seconds in that zone).\n4. Then list what to keep as it is (the style numbers that barely change).\n5. Say plainly what the data cannot tell you.\n6. Plain language, no jargon beyond the names used in the brief. At most 250 words.\n\n## Brief\n# Coaching brief: smooth\n\n## The laps\nThe driver's run takes 120.92 s. The RL lap that keeps the driver's style within its budget takes 117.36 s, 3.56 s faster. Everything below compares the driver's run with this RL lap.\n\n## Where the time is gained\nBiggest gains: C1 T1-2 (770-1122 m) 0.96 s faster (13.67 s to 12.72 s); C2 T3-6 (1970-3032 m) 0.93 s faster (28.29 s to 27.36 s); C3 T7-9 (3763-4295 m) 0.65 s faster (12.40 s to 11.75 s); S0 (0-770 m) 0.38 s faster (12.30 s to 11.92 s); S1 (1122-1970 m) 0.38 s faster (14.91 s to 14.53 s); S3 (4295-4939 m) 0.24 s faster (10.75 s to 10.50 s).\nThe straights together change by -0.99 s; the corner zones by -2.56 s. In the corner zones the two lines are 0.7 m apart on average (at most 1.8 m): the time comes mostly from braking and speed, not from a different line.\n\n## Corner by corner\n- T1: the RL lap starts braking 53 m later (213 m before the apex, the driver's run 266 m), is back on the throttle 44 m earlier, is faster 80 m after the apex (25.8 against 22.3 m/s). (zone C1 T1-2: -0.96 s)\n- T2: the RL lap presses the brake harder (peak 0.76 against 0.50), is faster 80 m after the apex (35.4 against 30.0 m/s), takes the apex 0.5 m closer to the inside. (zone C1 T1-2: -0.96 s)\n- T3: the RL lap starts braking 43 m later (189 m before the apex, the driver's run 231 m), carries less speed through the corner (lowest speed 21.4 against 23.5 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (29.3 against 27.8 m/s), takes the apex 0.5 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T4: the RL lap carries less speed through the corner (lowest speed 22.1 against 24.0 m/s), is back on the throttle 83 m earlier, is faster 80 m after the apex (37.2 against 33.5 m/s), takes the apex 0.4 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T5: the RL lap presses the brake harder (peak 0.87 against 0.63), takes the apex 0.8 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T6: the RL lap starts braking 17 m later (95 m before the apex, the driver's run 112 m), is back on the throttle 18 m earlier, is faster 80 m after the apex (40.6 against 38.5 m/s), takes the apex 0.7 m closer to the inside. (zone C2 T3-6: -0.93 s)\n- T7: the RL lap starts braking 31 m later (146 m before the apex, the driver's run 177 m), presses the brake less hard (peak 0.81 against 1.00), carries less speed through the corner (lowest speed 33.6 against 35.4 m/s), is back on the throttle 28 m earlier, is faster 80 m after the apex (41.9 against 39.6 m/s), takes the apex 0.4 m closer to the inside. (zone C3 T7-9: -0.65 s)\n- T8: the RL lap carries more speed through the corner (lowest speed 40.5 against 38.8 m/s), is faster 80 m after the apex (46.7 against 43.0 m/s), takes the apex 0.8 m wider. (zone C3 T7-9: -0.65 s)\n- T9: the RL lap carries more speed through the corner (lowest speed 44.1 against 41.4 m/s), is back on the throttle 10 m earlier, is faster 80 m after the apex (48.8 against 44.1 m/s), takes the apex 0.6 m closer to the inside. (zone C3 T7-9: -0.65 s)\n- T10: the RL lap starts braking 24 m later (174 m before the apex, the driver's run 197 m), is back on the throttle 17 m earlier, takes the apex 0.4 m wider. (zone C4 T10: -0.02 s)\n\n## The style (the 12 style numbers of the whole lap)\n- Brake attack (how fast it is applied): 13.47 to 3.03 pedal per s (-10.44): the RL lap applies the brake more progressively.\n- Steering corrections: 3.65 to 10.43 per km (+6.78): the RL lap corrects the steering more often.\n- Throttle attack: 0.47 to 0.78 pedal per s (+0.31): the RL lap gets on the throttle more abruptly.\n- Throttle lift: 2.18 to 1.85 pedal per s (-0.33): the RL lap lifts off the throttle more gradually.\n- Exit width: 3.92 to 4.35 m (+0.43): the RL lap stays further from the outside edge on the exit.\n- Brake pressure: 0.43 to 0.51 on the 0-1 pedal scale (+0.08): the RL lap presses the brake harder while braking.\n- Hand speed: 12.52 to 17.34 deg per s (+4.82): the RL lap turns the wheel faster (busier hands).\n- Apex distance: 2.05 to 1.76 m (-0.29): the RL lap gets closer to the inside edge at the apex.\n- Brake release: 0.47 to 0.74 pedal per s (+0.27): the RL lap lets the brake off faster.\n- Practically unchanged: Peak brake pressure (0.75 to 0.79 on the 0-1 pedal scale); Distance to the track edge (2.52 to 2.48 m); Peak steering in corners (64.45 to 64.80 deg).\n\n## What the data cannot say\n- All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).\n- The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).\n- The data shows what differs, not why it makes the car faster.\n\n## Task\nWrite the coaching message for the smooth driver.\n"
+ }
+}

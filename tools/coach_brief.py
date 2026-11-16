@@ -1,17 +1,19 @@
-"""The input for the LLM coach, built from the three laps of tools/lap_compare.py (the driver's run, the RL lap that keeps the style, the fastest RL lap).
+"""The input for the LLM coach, built from two laps of tools/lap_compare.py: the driver's run and the RL lap that keeps the style.
 
-    python tools/coach_brief.py DATA OUT
+    python tools/coach_brief.py DATA OUT        (run this before tools/lap_report.py: the replay page shows the brief)
 
 Writes into OUT/coaching:
     coach_facts.csv        the small facts table (both drivers): one row per fact, the value for each lap and the change from the driver's run
-    <driver>_brief.md      the same facts as plain sentences: lap, where the time is gained, corner by corner, the style, what stays the same, what the data cannot say
+    <driver>_brief.md      the same facts as plain sentences: the laps, where the time is gained, corner by corner, the style, what the data cannot say
     <driver>_prompt.md     an example prompt for the LLM: instructions + the brief
+    brief_data.json        the brief in a form the replay page shows (the corner sentences jump to their corner)
 
 Nothing here calls an LLM. The sentences are made by fixed rules from measured numbers, so every number in the brief is a measurement; the LLM only has to put it into coaching words and order it.
 Corner facts (measured on each lap): where braking starts (metres before the apex), the peak brake, the lowest speed, where the throttle comes back (metres after the apex), the speed 80 m after
 the apex, and the line at the apex (metres towards the inside of the corner).
 """
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -21,8 +23,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from lap_compare import sectors  # noqa: E402
-from lap_report import LAPS, PLAIN, UNIT, load, sector_table  # noqa: E402
+from lap_report import PLAIN, UNIT, load, sector_table  # noqa: E402
 
+TWO = ("driver", "keep")
 BRAKE_ON = 0.05
 # a difference counts as worth saying when it is at least this big
 MIN = {"brake_start_m": 8.0, "brake_peak": 0.15, "min_speed_ms": 1.5, "throttle_back_m": 8.0, "exit_speed_ms": 1.5, "line_to_inside_m": 0.4}
@@ -44,7 +47,7 @@ MEANING = {   # what a higher / lower value of each style number means, in words
 
 def brake_runs(df):
     """Braking runs of a lap: gaps shorter than 10 m are bridged; runs under 12 m or with a peak under 0.15 are dropped."""
-    p, b, v = df.progress.to_numpy(float), df.brake.to_numpy(float), df.speed.to_numpy(float)
+    p, b = df.progress.to_numpy(float), df.brake.to_numpy(float)
     on, n, out, i = b > BRAKE_ON, len(p), [], 0
     while i < n:
         if not on[i]:
@@ -82,7 +85,7 @@ def corner_facts(df, corners):
 
 
 def line_sentence(laps, segs):
-    """How far apart the lines of the driver's run and the style-kept lap are in the corner zones."""
+    """How far apart the lines of the driver's run and the RL lap are in the corner zones."""
     diffs = []
     for nm, kind, lo, hi in segs:
         if kind == "corners":
@@ -139,43 +142,42 @@ def corner_sentence(cn, f0, f1, shared=False):
 
 
 def build(name, laps, info, sn, corners, segs):
-    """Returns (facts rows, brief text) for one driver."""
+    """Returns (facts table, brief as markdown, brief as sections for the replay page) for one driver."""
     sec = sector_table(laps, segs)
-    cf = {k: corner_facts(laps[k], corners) for k in LAPS}
+    cf = {k: corner_facts(laps[k], corners) for k in TWO}
     rows = []
 
-    def add(level, item, metric, unit, vals):
-        v0, v1, v2 = vals
-        rows.append({"driver": name, "level": level, "item": item, "metric": metric, "unit": unit, "driver_run": v0, "rl_style_kept": v1, "rl_fastest": v2,
-                     "change_style_kept": v1 - v0 if not (np.isnan(v0) or np.isnan(v1)) else np.nan, "change_fastest": v2 - v0 if not (np.isnan(v0) or np.isnan(v2)) else np.nan})
+    def add(level, item, metric, unit, v0, v1):
+        rows.append({"driver": name, "level": level, "item": item, "metric": metric, "unit": unit, "driver_run": v0, "rl_style_kept": v1,
+                     "change": v1 - v0 if not (np.isnan(v0) or np.isnan(v1)) else np.nan})
 
-    add("lap", "lap", "lap time", "s", tuple(info[k]["lap_time"] for k in LAPS))
+    add("lap", "lap", "lap time", "s", info["driver"]["lap_time"], info["keep"]["lap_time"])
     for r in sec.itertuples():
-        add("sector", r.sector, "sector time", "s", (r.time_driver, r.time_keep, r.time_fast))
+        add("sector", r.sector, "sector time", "s", r.time_driver, r.time_keep)
     names = {"brake_start_m": ("braking starts", "m before the apex"), "brake_peak": ("peak brake", "pedal 0-1"), "min_speed_ms": ("lowest speed", "m/s"),
              "throttle_back_m": ("throttle back on", "m after the apex"), "exit_speed_ms": ("speed 80 m after the apex", "m/s"), "line_to_inside_m": ("line at the apex", "m towards the inside")}
     for c in corners.itertuples():
         for m, (lab, unit) in names.items():
-            add("corner", f"T{int(c.corner)}", lab, unit, tuple(cf[k][int(c.corner)][m] for k in LAPS))
+            add("corner", f"T{int(c.corner)}", lab, unit, cf["driver"][int(c.corner)][m], cf["keep"][int(c.corner)][m])
     for i, key in enumerate(sn.number):
-        add("style", PLAIN[key], key, UNIT[key], (sn.driver_run[i], sn.style_kept[i], sn.fastest[i]))
+        add("style", PLAIN[key], key, UNIT[key], sn.driver_run[i], sn.style_kept[i])
     facts = pd.DataFrame(rows)
 
-    t0, t1, t2 = (info[k]["lap_time"] for k in LAPS)
-    L = []
-    L.append(f"# Coaching brief: {name}\n")
-    L.append("## The laps")
-    L.append(f"The driver's run takes {t0:.2f} s. The RL lap that keeps the driver's style within its budget takes {t1:.2f} s, {t0 - t1:.2f} s faster. "
-             f"The fastest RL lap takes {t2:.2f} s, {t0 - t2:.2f} s faster, but it changes the style more (see the end). The comparison below is the driver's run against the style-kept RL lap.\n")
-    L.append("## Where the time is gained (style-kept RL lap against the driver's run)")
+    sections = []
+
+    def item(text, bullet=True, corner=None, zone=None, apex=None):
+        return {"text": text, "bullet": bullet, "corner": corner, "zone": zone, "apex": apex}
+
+    t0, t1 = info["driver"]["lap_time"], info["keep"]["lap_time"]
+    sections.append(("The laps", [item(f"The driver's run takes {t0:.2f} s. The RL lap that keeps the driver's style within its budget takes {t1:.2f} s, {t0 - t1:.2f} s faster. "
+                                       f"Everything below compares the driver's run with this RL lap.", bullet=False)]))
     g = sec.sort_values("keep_vs_driver")
     gained = [r for r in g.itertuples() if r.keep_vs_driver <= -0.15]
-    L.append("Biggest gains: " + "; ".join(f"{r.sector} ({r.from_m}-{r.to_m} m) {abs(r.keep_vs_driver):.2f} s faster ({r.time_driver:.2f} s to {r.time_keep:.2f} s)" for r in gained) + ".")
     st = sec[sec.kind == "straight"]
-    L.append(f"The straights together change by {st.keep_vs_driver.sum():+.2f} s; the corner zones by {sec[sec.kind == 'corners'].keep_vs_driver.sum():+.2f} s. "
-             f"{line_sentence(laps, segs)}\n")
-    L.append("## Corner by corner (style-kept RL lap against the driver's run)")
-    quiet, prev = [], None
+    sections.append(("Where the time is gained", [
+        item("Biggest gains: " + "; ".join(f"{r.sector} ({r.from_m}-{r.to_m} m) {abs(r.keep_vs_driver):.2f} s faster ({r.time_driver:.2f} s to {r.time_keep:.2f} s)" for r in gained) + ".", bullet=False),
+        item(f"The straights together change by {st.keep_vs_driver.sum():+.2f} s; the corner zones by {sec[sec.kind == 'corners'].keep_vs_driver.sum():+.2f} s. {line_sentence(laps, segs)}", bullet=False)]))
+    items, quiet, prev = [], [], None
     for c in corners.itertuples():
         n = int(c.corner)
         low = (round(cf["driver"][n]["min_speed_ms"], 1), round(cf["keep"][n]["min_speed_ms"], 1))
@@ -183,43 +185,41 @@ def build(name, laps, info, sn, corners, segs):
         prev = low
         s = corner_sentence(n, cf["driver"][n], cf["keep"][n], shared)
         z = zone_of(segs, c.s_apex)
+        zr = sec[sec.sector == z]
+        tail = f" (zone {z}: {zr.keep_vs_driver.iloc[0]:+.2f} s)" if len(zr) else ""
         if shared and not s:
-            L.append(f"- T{n}: same low point as T{n - 1}, no other clear difference.")
+            items.append(item(f"T{n}: same low point as T{n - 1}, no other clear difference.", corner=n, zone=z, apex=float(c.s_apex)))
         elif s:
-            zr = sec[sec.sector == z]
-            L.append(f"- {s}" + (f" (zone {z}: {zr.keep_vs_driver.iloc[0]:+.2f} s)" if len(zr) else ""))
+            items.append(item(s + tail, corner=n, zone=z, apex=float(c.s_apex)))
         else:
-            quiet.append(f"T{int(c.corner)}")
+            quiet.append(f"T{n}")
     if quiet:
-        L.append(f"- No clear difference in: {', '.join(quiet)}.")
-    L.append("")
-    L.append("## The style (the 12 style numbers of the whole lap: driver's run to style-kept RL lap)")
+        items.append(item(f"No clear difference in: {', '.join(quiet)}."))
+    sections.append(("Corner by corner (click a line to see the corner)", items))
     spread = sn.spread.to_numpy(float)
-    ch = (sn.style_kept.to_numpy(float) - sn.driver_run.to_numpy(float))
+    ch = sn.style_kept.to_numpy(float) - sn.driver_run.to_numpy(float)
     order = np.argsort(-np.abs(ch) / spread)
     big = [i for i in order if abs(ch[i]) / spread[i] >= 0.3]
+    small = [i for i in order if abs(ch[i]) / spread[i] < 0.3]
+    its = []
     for i in big:
         key = sn.number[i]
         up, down = MEANING[key]
-        L.append(f"- {PLAIN[key]}: {sn.driver_run[i]:.2f} to {sn.style_kept[i]:.2f} {uni(key)} ({ch[i]:+.2f}): the RL lap {up if ch[i] > 0 else down}.")
-    small = [i for i in order if abs(ch[i]) / spread[i] < 0.3]
+        its.append(item(f"{PLAIN[key]}: {sn.driver_run[i]:.2f} to {sn.style_kept[i]:.2f} {uni(key)} ({ch[i]:+.2f}): the RL lap {up if ch[i] > 0 else down}."))
     if small:
-        L.append("- Practically unchanged: " + "; ".join(f"{PLAIN[sn.number[i]]} ({sn.driver_run[i]:.2f} to {sn.style_kept[i]:.2f} {uni(sn.number[i])})" for i in small) + ".")
-    L.append("")
-    L.append("## The fastest RL lap, for comparison")
-    d2 = sn.fastest.to_numpy(float) - sn.style_kept.to_numpy(float)
-    far = [i for i in np.argsort(-np.abs(d2) / spread) if abs(d2[i]) / spread[i] >= 0.5]
-    if far:
-        L.append(f"It is only {t1 - t2:.2f} s faster than the style-kept lap, and differs from it mainly in: " +
-                 "; ".join(f"{PLAIN[sn.number[i]]} {sn.style_kept[i]:.2f} to {sn.fastest[i]:.2f} {uni(sn.number[i])}" for i in far) + ".")
-    else:
-        L.append(f"It is only {t1 - t2:.2f} s faster than the style-kept lap and has nearly the same style numbers.")
-    L.append("")
-    L.append("## What the data cannot say")
-    L.append("- All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap).")
-    L.append("- The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each).")
-    L.append("- The data shows what differs, not why it makes the car faster.")
-    return facts, "\n".join(L) + "\n"
+        its.append(item("Practically unchanged: " + "; ".join(f"{PLAIN[sn.number[i]]} ({sn.driver_run[i]:.2f} to {sn.style_kept[i]:.2f} {uni(sn.number[i])})" for i in small) + "."))
+    sections.append(("The style (the 12 style numbers of the whole lap)", its))
+    sections.append(("What the data cannot say", [
+        item("All laps are simulator laps of the same car. The driver's run is the pure-pursuit replay of the driver's line (a model, not a human lap)."),
+        item("The style numbers are whole-lap values; the corner facts are measured on these two laps only (one lap each)."),
+        item("The data shows what differs, not why it makes the car faster.")]))
+    md = [f"# Coaching brief: {name}\n"]
+    for heading, its in sections:
+        md.append(f"## {heading.split(' (click')[0]}")
+        for x in its:
+            md.append(("- " if x["bullet"] else "") + x["text"])
+        md.append("")
+    return facts, "\n".join(md), [{"heading": h, "items": its} for h, its in sections]
 
 
 PROMPT = """# Prompt for the coaching LLM (example for the {name})
@@ -251,17 +251,20 @@ def main():
     out = a.out / "coaching"
     out.mkdir(parents=True, exist_ok=True)
     corners = pd.read_csv(ROOT / "data" / "monza_corners.csv")
-    allf = []
+    allf, bdata = [], {}
     for name in ("attacker", "smooth"):
         if not (a.data / name).is_dir():
             continue
         laps, info, sn = load(a.data / name)
         L = min(float(df.progress.iloc[-1]) for df in laps.values())
-        facts, brief = build(name, laps, info, sn, corners, sectors(L))
+        facts, brief, sections = build(name, laps, info, sn, corners, sectors(L))
+        prompt = PROMPT.format(name=name, brief=brief)
         (out / f"{name}_brief.md").write_text(brief, encoding="utf-8")
-        (out / f"{name}_prompt.md").write_text(PROMPT.format(name=name, brief=brief), encoding="utf-8")
+        (out / f"{name}_prompt.md").write_text(prompt, encoding="utf-8")
+        bdata[name] = {"sections": sections, "markdown": brief, "prompt": prompt}
         allf.append(facts)
     pd.concat(allf).round(3).to_csv(out / "coach_facts.csv", index=False)
+    (out / "brief_data.json").write_text(json.dumps(bdata, indent=1), encoding="utf-8")
     print((out / "attacker_brief.md").read_text(encoding="utf-8"))
 
 

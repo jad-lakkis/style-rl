@@ -1,165 +1,165 @@
-driver,level,item,metric,unit,driver_run,rl_style_kept,rl_fastest,change_style_kept,change_fastest
-attacker,lap,lap,lap time,s,119.8,116.52,116.36,-3.28,-3.44
-attacker,sector,S0,sector time,s,11.853,11.986,12.083,0.133,0.23
-attacker,sector,C1 T1-2,sector time,s,13.738,12.863,12.763,-0.874,-0.974
-attacker,sector,S1,sector time,s,14.762,14.539,14.448,-0.223,-0.314
-attacker,sector,C2 T3-6,sector time,s,27.747,26.799,26.581,-0.947,-1.165
-attacker,sector,S2,sector time,s,12.239,12.163,12.215,-0.076,-0.024
-attacker,sector,C3 T7-9,sector time,s,12.284,11.781,11.986,-0.503,-0.298
-attacker,sector,S3,sector time,s,10.553,10.518,10.534,-0.035,-0.018
-attacker,sector,C4 T10,sector time,s,13.221,12.524,12.434,-0.697,-0.787
-attacker,sector,S4,sector time,s,3.365,3.3,3.253,-0.065,-0.112
-attacker,corner,T1,braking starts,m before the apex,191.599,218.044,212.518,26.444,20.918
-attacker,corner,T1,peak brake,pedal 0-1,1.0,1.0,1.0,0.0,0.0
-attacker,corner,T1,lowest speed,m/s,13.954,16.571,16.423,2.616,2.468
-attacker,corner,T1,throttle back on,m after the apex,66.706,53.749,51.073,-12.957,-15.634
-attacker,corner,T1,speed 80 m after the apex,m/s,21.778,23.289,24.439,1.511,2.661
-attacker,corner,T1,line at the apex,m towards the inside,-0.15,-0.406,-0.242,-0.256,-0.093
-attacker,corner,T2,braking starts,m before the apex,24.266,23.844,24.692,-0.423,0.425
-attacker,corner,T2,peak brake,pedal 0-1,0.841,0.826,0.734,-0.015,-0.107
-attacker,corner,T2,lowest speed,m/s,13.954,16.571,16.423,2.616,2.468
-attacker,corner,T2,throttle back on,m after the apex,24.7,11.743,9.067,-12.957,-15.634
-attacker,corner,T2,speed 80 m after the apex,m/s,33.413,33.781,34.737,0.368,1.324
-attacker,corner,T2,line at the apex,m towards the inside,-0.408,-0.413,-0.569,-0.005,-0.161
-attacker,corner,T3,braking starts,m before the apex,171.658,194.999,196.986,23.341,25.328
-attacker,corner,T3,peak brake,pedal 0-1,1.0,1.0,0.803,0.0,-0.197
-attacker,corner,T3,lowest speed,m/s,20.52,22.396,22.67,1.877,2.15
-attacker,corner,T3,throttle back on,m after the apex,14.03,8.997,2.041,-5.032,-11.989
-attacker,corner,T3,speed 80 m after the apex,m/s,31.27,29.865,30.771,-1.405,-0.499
-attacker,corner,T3,line at the apex,m towards the inside,-0.124,0.185,0.071,0.309,0.195
-attacker,corner,T4,braking starts,m before the apex,,,,,
-attacker,corner,T4,peak brake,pedal 0-1,,,,,
-attacker,corner,T4,lowest speed,m/s,20.652,22.638,23.685,1.987,3.033
-attacker,corner,T4,throttle back on,m after the apex,-31.977,-37.009,-38.313,-5.032,-6.336
-attacker,corner,T4,speed 80 m after the apex,m/s,39.358,35.923,38.059,-3.434,-1.299
-attacker,corner,T4,line at the apex,m towards the inside,-0.424,-0.612,-0.597,-0.188,-0.173
-attacker,corner,T5,braking starts,m before the apex,111.533,102.134,104.562,-9.399,-6.97
-attacker,corner,T5,peak brake,pedal 0-1,1.0,0.8,1.0,-0.2,0.0
-attacker,corner,T5,lowest speed,m/s,35.43,38.374,38.733,2.944,3.303
-attacker,corner,T5,throttle back on,m after the apex,43.363,-5.59,18.045,-48.954,-25.318
-attacker,corner,T5,speed 80 m after the apex,m/s,39.32,43.786,43.874,4.466,4.554
-attacker,corner,T5,line at the apex,m towards the inside,-0.006,0.249,-0.569,0.254,-0.563
-attacker,corner,T6,braking starts,m before the apex,93.818,103.106,98.734,9.289,4.916
-attacker,corner,T6,peak brake,pedal 0-1,1.0,1.0,1.0,0.0,0.0
-attacker,corner,T6,lowest speed,m/s,32.725,34.871,34.563,2.147,1.838
-attacker,corner,T6,throttle back on,m after the apex,25.421,14.456,33.18,-10.966,7.759
-attacker,corner,T6,speed 80 m after the apex,m/s,40.555,41.623,41.046,1.068,0.491
-attacker,corner,T6,line at the apex,m towards the inside,-0.315,-0.136,-0.195,0.179,0.12
-attacker,corner,T7,braking starts,m before the apex,148.319,146.959,145.219,-1.36,-3.101
-attacker,corner,T7,peak brake,pedal 0-1,1.0,0.913,0.916,-0.087,-0.084
-attacker,corner,T7,lowest speed,m/s,29.183,35.564,34.159,6.381,4.976
-attacker,corner,T7,throttle back on,m after the apex,11.389,8.923,-0.038,-2.465,-11.426
-attacker,corner,T7,speed 80 m after the apex,m/s,40.321,41.294,40.26,0.973,-0.062
-attacker,corner,T7,line at the apex,m towards the inside,0.76,0.724,1.322,-0.036,0.562
-attacker,corner,T8,braking starts,m before the apex,,,,,
-attacker,corner,T8,peak brake,pedal 0-1,,,,,
-attacker,corner,T8,lowest speed,m/s,38.954,39.797,39.28,0.843,0.326
-attacker,corner,T8,throttle back on,m after the apex,-39.595,-39.051,-39.985,0.543,-0.39
-attacker,corner,T8,speed 80 m after the apex,m/s,45.933,46.543,44.153,0.61,-1.78
-attacker,corner,T8,line at the apex,m towards the inside,-0.519,-0.276,0.257,0.243,0.776
-attacker,corner,T9,braking starts,m before the apex,,,,,
-attacker,corner,T9,peak brake,pedal 0-1,,,,,
-attacker,corner,T9,lowest speed,m/s,43.307,43.65,41.008,0.343,-2.299
-attacker,corner,T9,throttle back on,m after the apex,-39.287,-39.456,-38.742,-0.169,0.546
-attacker,corner,T9,speed 80 m after the apex,m/s,48.89,48.772,48.049,-0.118,-0.841
-attacker,corner,T9,line at the apex,m towards the inside,-0.734,-0.466,0.087,0.268,0.821
-attacker,corner,T10,braking starts,m before the apex,180.028,177.081,175.111,-2.947,-4.917
-attacker,corner,T10,peak brake,pedal 0-1,1.0,1.0,1.0,0.0,0.0
-attacker,corner,T10,lowest speed,m/s,37.6,41.66,41.573,4.061,3.973
-attacker,corner,T10,throttle back on,m after the apex,39.809,-38.281,-38.614,-78.09,-78.422
-attacker,corner,T10,speed 80 m after the apex,m/s,40.837,44.121,44.806,3.284,3.969
-attacker,corner,T10,line at the apex,m towards the inside,-0.667,-0.94,-0.83,-0.273,-0.163
-attacker,style,Brake pressure,B_mean_active,"pedal, 0-1",0.68,0.556,0.547,-0.124,-0.134
-attacker,style,Peak brake pressure,B_event_peak_mean,"pedal, 0-1",0.977,0.842,0.922,-0.135,-0.055
-attacker,style,Brake attack (how fast it is applied),B_apply_rate,pedal per s,6.255,8.853,11.633,2.597,5.378
-attacker,style,Brake release,B_release_rate,pedal per s,0.625,0.999,0.743,0.374,0.118
-attacker,style,Throttle attack,T_apply_rate,pedal per s,1.063,0.722,0.744,-0.341,-0.32
-attacker,style,Throttle lift,T_release_rate,pedal per s,1.773,1.601,1.756,-0.173,-0.018
-attacker,style,Steering corrections,S_reversals_5deg_per_km,per km,7.993,18.941,15.639,10.947,7.646
-attacker,style,Hand speed,S_mean_abs_rate,deg per s,16.012,25.152,21.972,9.14,5.96
-attacker,style,Peak steering in corners,S_corner_peak_angle,deg,66.106,67.154,63.762,1.048,-2.344
-attacker,style,Distance to the track edge,L_border_mean_m,m,2.204,2.513,2.452,0.31,0.248
-attacker,style,Apex distance,L_inside_dist_apex_m,m,1.677,1.606,1.538,-0.07,-0.139
-attacker,style,Exit width,L_outside_dist_exit_m,m,4.04,4.011,3.956,-0.029,-0.085
-smooth,lap,lap,lap time,s,120.92,117.36,116.88,-3.56,-4.04
-smooth,sector,S0,sector time,s,12.3,11.921,12.012,-0.38,-0.288
-smooth,sector,C1 T1-2,sector time,s,13.674,12.718,12.623,-0.956,-1.051
-smooth,sector,S1,sector time,s,14.91,14.531,14.497,-0.378,-0.412
-smooth,sector,C2 T3-6,sector time,s,28.291,27.358,27.313,-0.933,-0.979
-smooth,sector,S2,sector time,s,12.317,12.323,12.187,0.006,-0.13
-smooth,sector,C3 T7-9,sector time,s,12.396,11.747,11.817,-0.649,-0.58
-smooth,sector,S3,sector time,s,10.745,10.503,10.51,-0.242,-0.235
-smooth,sector,C4 T10,sector time,s,12.924,12.907,12.531,-0.017,-0.393
-smooth,sector,S4,sector time,s,3.303,3.305,3.35,0.002,0.047
-smooth,corner,T1,braking starts,m before the apex,266.23,212.857,211.64,-53.374,-54.59
-smooth,corner,T1,peak brake,pedal 0-1,1.0,1.0,0.929,0.0,-0.071
-smooth,corner,T1,lowest speed,m/s,15.963,16.203,16.682,0.239,0.719
-smooth,corner,T1,throttle back on,m after the apex,87.945,44.165,54.81,-43.78,-33.135
-smooth,corner,T1,speed 80 m after the apex,m/s,22.333,25.799,25.664,3.465,3.331
-smooth,corner,T1,line at the apex,m towards the inside,-0.479,-0.345,-0.081,0.134,0.398
-smooth,corner,T2,braking starts,m before the apex,26.678,24.529,25.061,-2.149,-1.617
-smooth,corner,T2,peak brake,pedal 0-1,0.499,0.755,0.444,0.256,-0.056
-smooth,corner,T2,lowest speed,m/s,15.963,16.203,16.682,0.239,0.719
-smooth,corner,T2,throttle back on,m after the apex,45.939,2.158,12.804,-43.78,-33.135
-smooth,corner,T2,speed 80 m after the apex,m/s,29.98,35.358,35.234,5.377,5.254
-smooth,corner,T2,line at the apex,m towards the inside,-0.859,-0.322,-0.413,0.536,0.446
-smooth,corner,T3,braking starts,m before the apex,231.381,188.69,189.003,-42.691,-42.378
-smooth,corner,T3,peak brake,pedal 0-1,1.0,0.941,0.9,-0.059,-0.1
-smooth,corner,T3,lowest speed,m/s,23.528,21.416,22.89,-2.112,-0.639
-smooth,corner,T3,throttle back on,m after the apex,92.282,9.478,20.893,-82.804,-71.388
-smooth,corner,T3,speed 80 m after the apex,m/s,27.751,29.309,28.436,1.558,0.685
-smooth,corner,T3,line at the apex,m towards the inside,-0.294,0.22,0.001,0.514,0.294
-smooth,corner,T4,braking starts,m before the apex,,,,,
-smooth,corner,T4,peak brake,pedal 0-1,,,,,
-smooth,corner,T4,lowest speed,m/s,23.966,22.123,23.038,-1.843,-0.927
-smooth,corner,T4,throttle back on,m after the apex,46.275,-36.529,-25.113,-82.804,-71.388
-smooth,corner,T4,speed 80 m after the apex,m/s,33.514,37.165,35.816,3.651,2.302
-smooth,corner,T4,line at the apex,m towards the inside,-0.832,-0.427,-0.591,0.404,0.241
-smooth,corner,T5,braking starts,m before the apex,110.648,103.088,101.273,-7.56,-9.375
-smooth,corner,T5,peak brake,pedal 0-1,0.632,0.871,0.605,0.239,-0.027
-smooth,corner,T5,lowest speed,m/s,37.749,37.455,38.233,-0.293,0.484
-smooth,corner,T5,throttle back on,m after the apex,43.435,36.164,26.608,-7.271,-16.827
-smooth,corner,T5,speed 80 m after the apex,m/s,40.267,40.75,41.009,0.483,0.742
-smooth,corner,T5,line at the apex,m towards the inside,-0.519,0.271,-0.752,0.789,-0.233
-smooth,corner,T6,braking starts,m before the apex,111.796,94.658,94.639,-17.138,-17.157
-smooth,corner,T6,peak brake,pedal 0-1,0.711,0.59,1.0,-0.122,0.289
-smooth,corner,T6,lowest speed,m/s,33.916,34.865,34.67,0.949,0.755
-smooth,corner,T6,throttle back on,m after the apex,42.231,24.713,13.05,-17.518,-29.181
-smooth,corner,T6,speed 80 m after the apex,m/s,38.526,40.561,41.351,2.035,2.824
-smooth,corner,T6,line at the apex,m towards the inside,-0.68,0.058,-0.944,0.738,-0.263
-smooth,corner,T7,braking starts,m before the apex,176.53,145.97,146.642,-30.56,-29.888
-smooth,corner,T7,peak brake,pedal 0-1,1.0,0.808,0.951,-0.192,-0.049
-smooth,corner,T7,lowest speed,m/s,35.421,33.61,33.328,-1.811,-2.094
-smooth,corner,T7,throttle back on,m after the apex,32.276,4.673,-0.282,-27.603,-32.558
-smooth,corner,T7,speed 80 m after the apex,m/s,39.614,41.921,41.92,2.307,2.306
-smooth,corner,T7,line at the apex,m towards the inside,-0.007,0.407,1.157,0.414,1.163
-smooth,corner,T8,braking starts,m before the apex,,,,,
-smooth,corner,T8,peak brake,pedal 0-1,,,,,
-smooth,corner,T8,lowest speed,m/s,38.822,40.491,40.947,1.669,2.125
-smooth,corner,T8,throttle back on,m after the apex,-39.079,-39.365,-38.367,-0.286,0.712
-smooth,corner,T8,speed 80 m after the apex,m/s,43.016,46.672,46.284,3.656,3.268
-smooth,corner,T8,line at the apex,m towards the inside,-0.745,-1.578,0.001,-0.832,0.746
-smooth,corner,T9,braking starts,m before the apex,,,,,
-smooth,corner,T9,peak brake,pedal 0-1,,,,,
-smooth,corner,T9,lowest speed,m/s,41.425,44.13,43.351,2.705,1.926
-smooth,corner,T9,throttle back on,m after the apex,-29.801,-39.498,-38.913,-9.697,-9.112
-smooth,corner,T9,speed 80 m after the apex,m/s,44.149,48.775,48.668,4.626,4.52
-smooth,corner,T9,line at the apex,m towards the inside,-0.634,-0.056,-0.236,0.578,0.398
-smooth,corner,T10,braking starts,m before the apex,197.23,173.58,174.372,-23.65,-22.858
-smooth,corner,T10,peak brake,pedal 0-1,1.0,1.0,0.862,0.0,-0.138
-smooth,corner,T10,lowest speed,m/s,39.62,38.706,40.29,-0.914,0.67
-smooth,corner,T10,throttle back on,m after the apex,49.53,32.963,14.399,-16.567,-35.131
-smooth,corner,T10,speed 80 m after the apex,m/s,41.383,41.569,44.641,0.186,3.259
-smooth,corner,T10,line at the apex,m towards the inside,-1.115,-1.552,-0.288,-0.437,0.828
-smooth,style,Brake pressure,B_mean_active,"pedal, 0-1",0.431,0.511,0.522,0.08,0.092
-smooth,style,Peak brake pressure,B_event_peak_mean,"pedal, 0-1",0.754,0.786,0.813,0.031,0.059
-smooth,style,Brake attack (how fast it is applied),B_apply_rate,pedal per s,13.473,3.029,4.738,-10.445,-8.735
-smooth,style,Brake release,B_release_rate,pedal per s,0.469,0.736,0.529,0.268,0.061
-smooth,style,Throttle attack,T_apply_rate,pedal per s,0.465,0.776,0.709,0.31,0.243
-smooth,style,Throttle lift,T_release_rate,pedal per s,2.181,1.848,1.472,-0.333,-0.709
-smooth,style,Steering corrections,S_reversals_5deg_per_km,per km,3.649,10.426,14.77,6.777,11.121
-smooth,style,Hand speed,S_mean_abs_rate,deg per s,12.524,17.34,23.415,4.816,10.891
-smooth,style,Peak steering in corners,S_corner_peak_angle,deg,64.445,64.805,66.995,0.36,2.55
-smooth,style,Distance to the track edge,L_border_mean_m,m,2.52,2.483,2.532,-0.037,0.012
-smooth,style,Apex distance,L_inside_dist_apex_m,m,2.051,1.763,1.634,-0.288,-0.417
-smooth,style,Exit width,L_outside_dist_exit_m,m,3.917,4.349,3.931,0.432,0.014
+driver,level,item,metric,unit,driver_run,rl_style_kept,change
+attacker,lap,lap,lap time,s,119.8,116.52,-3.28
+attacker,sector,S0,sector time,s,11.853,11.986,0.133
+attacker,sector,C1 T1-2,sector time,s,13.738,12.863,-0.874
+attacker,sector,S1,sector time,s,14.762,14.539,-0.223
+attacker,sector,C2 T3-6,sector time,s,27.747,26.799,-0.947
+attacker,sector,S2,sector time,s,12.239,12.163,-0.076
+attacker,sector,C3 T7-9,sector time,s,12.284,11.781,-0.503
+attacker,sector,S3,sector time,s,10.553,10.518,-0.035
+attacker,sector,C4 T10,sector time,s,13.221,12.524,-0.697
+attacker,sector,S4,sector time,s,3.365,3.3,-0.065
+attacker,corner,T1,braking starts,m before the apex,191.599,218.044,26.444
+attacker,corner,T1,peak brake,pedal 0-1,1.0,1.0,0.0
+attacker,corner,T1,lowest speed,m/s,13.954,16.571,2.616
+attacker,corner,T1,throttle back on,m after the apex,66.706,53.749,-12.957
+attacker,corner,T1,speed 80 m after the apex,m/s,21.778,23.289,1.511
+attacker,corner,T1,line at the apex,m towards the inside,-0.15,-0.406,-0.256
+attacker,corner,T2,braking starts,m before the apex,24.266,23.844,-0.423
+attacker,corner,T2,peak brake,pedal 0-1,0.841,0.826,-0.015
+attacker,corner,T2,lowest speed,m/s,13.954,16.571,2.616
+attacker,corner,T2,throttle back on,m after the apex,24.7,11.743,-12.957
+attacker,corner,T2,speed 80 m after the apex,m/s,33.413,33.781,0.368
+attacker,corner,T2,line at the apex,m towards the inside,-0.408,-0.413,-0.005
+attacker,corner,T3,braking starts,m before the apex,171.658,194.999,23.341
+attacker,corner,T3,peak brake,pedal 0-1,1.0,1.0,0.0
+attacker,corner,T3,lowest speed,m/s,20.52,22.396,1.877
+attacker,corner,T3,throttle back on,m after the apex,14.03,8.997,-5.032
+attacker,corner,T3,speed 80 m after the apex,m/s,31.27,29.865,-1.405
+attacker,corner,T3,line at the apex,m towards the inside,-0.124,0.185,0.309
+attacker,corner,T4,braking starts,m before the apex,,,
+attacker,corner,T4,peak brake,pedal 0-1,,,
+attacker,corner,T4,lowest speed,m/s,20.652,22.638,1.987
+attacker,corner,T4,throttle back on,m after the apex,-31.977,-37.009,-5.032
+attacker,corner,T4,speed 80 m after the apex,m/s,39.358,35.923,-3.434
+attacker,corner,T4,line at the apex,m towards the inside,-0.424,-0.612,-0.188
+attacker,corner,T5,braking starts,m before the apex,111.533,102.134,-9.399
+attacker,corner,T5,peak brake,pedal 0-1,1.0,0.8,-0.2
+attacker,corner,T5,lowest speed,m/s,35.43,38.374,2.944
+attacker,corner,T5,throttle back on,m after the apex,43.363,-5.59,-48.954
+attacker,corner,T5,speed 80 m after the apex,m/s,39.32,43.786,4.466
+attacker,corner,T5,line at the apex,m towards the inside,-0.006,0.249,0.254
+attacker,corner,T6,braking starts,m before the apex,93.818,103.106,9.289
+attacker,corner,T6,peak brake,pedal 0-1,1.0,1.0,0.0
+attacker,corner,T6,lowest speed,m/s,32.725,34.871,2.147
+attacker,corner,T6,throttle back on,m after the apex,25.421,14.456,-10.966
+attacker,corner,T6,speed 80 m after the apex,m/s,40.555,41.623,1.068
+attacker,corner,T6,line at the apex,m towards the inside,-0.315,-0.136,0.179
+attacker,corner,T7,braking starts,m before the apex,148.319,146.959,-1.36
+attacker,corner,T7,peak brake,pedal 0-1,1.0,0.913,-0.087
+attacker,corner,T7,lowest speed,m/s,29.183,35.564,6.381
+attacker,corner,T7,throttle back on,m after the apex,11.389,8.923,-2.465
+attacker,corner,T7,speed 80 m after the apex,m/s,40.321,41.294,0.973
+attacker,corner,T7,line at the apex,m towards the inside,0.76,0.724,-0.036
+attacker,corner,T8,braking starts,m before the apex,,,
+attacker,corner,T8,peak brake,pedal 0-1,,,
+attacker,corner,T8,lowest speed,m/s,38.954,39.797,0.843
+attacker,corner,T8,throttle back on,m after the apex,-39.595,-39.051,0.543
+attacker,corner,T8,speed 80 m after the apex,m/s,45.933,46.543,0.61
+attacker,corner,T8,line at the apex,m towards the inside,-0.519,-0.276,0.243
+attacker,corner,T9,braking starts,m before the apex,,,
+attacker,corner,T9,peak brake,pedal 0-1,,,
+attacker,corner,T9,lowest speed,m/s,43.307,43.65,0.343
+attacker,corner,T9,throttle back on,m after the apex,-39.287,-39.456,-0.169
+attacker,corner,T9,speed 80 m after the apex,m/s,48.89,48.772,-0.118
+attacker,corner,T9,line at the apex,m towards the inside,-0.734,-0.466,0.268
+attacker,corner,T10,braking starts,m before the apex,180.028,177.081,-2.947
+attacker,corner,T10,peak brake,pedal 0-1,1.0,1.0,0.0
+attacker,corner,T10,lowest speed,m/s,37.6,41.66,4.061
+attacker,corner,T10,throttle back on,m after the apex,39.809,-38.281,-78.09
+attacker,corner,T10,speed 80 m after the apex,m/s,40.837,44.121,3.284
+attacker,corner,T10,line at the apex,m towards the inside,-0.667,-0.94,-0.273
+attacker,style,Brake pressure,B_mean_active,"pedal, 0-1",0.68,0.556,-0.124
+attacker,style,Peak brake pressure,B_event_peak_mean,"pedal, 0-1",0.977,0.842,-0.135
+attacker,style,Brake attack (how fast it is applied),B_apply_rate,pedal per s,6.255,8.853,2.597
+attacker,style,Brake release,B_release_rate,pedal per s,0.625,0.999,0.374
+attacker,style,Throttle attack,T_apply_rate,pedal per s,1.063,0.722,-0.341
+attacker,style,Throttle lift,T_release_rate,pedal per s,1.773,1.601,-0.173
+attacker,style,Steering corrections,S_reversals_5deg_per_km,per km,7.993,18.941,10.947
+attacker,style,Hand speed,S_mean_abs_rate,deg per s,16.012,25.152,9.14
+attacker,style,Peak steering in corners,S_corner_peak_angle,deg,66.106,67.154,1.048
+attacker,style,Distance to the track edge,L_border_mean_m,m,2.204,2.513,0.31
+attacker,style,Apex distance,L_inside_dist_apex_m,m,1.677,1.606,-0.07
+attacker,style,Exit width,L_outside_dist_exit_m,m,4.04,4.011,-0.029
+smooth,lap,lap,lap time,s,120.92,117.36,-3.56
+smooth,sector,S0,sector time,s,12.3,11.921,-0.38
+smooth,sector,C1 T1-2,sector time,s,13.674,12.718,-0.956
+smooth,sector,S1,sector time,s,14.91,14.531,-0.378
+smooth,sector,C2 T3-6,sector time,s,28.291,27.358,-0.933
+smooth,sector,S2,sector time,s,12.317,12.323,0.006
+smooth,sector,C3 T7-9,sector time,s,12.396,11.747,-0.649
+smooth,sector,S3,sector time,s,10.745,10.503,-0.242
+smooth,sector,C4 T10,sector time,s,12.924,12.907,-0.017
+smooth,sector,S4,sector time,s,3.303,3.305,0.002
+smooth,corner,T1,braking starts,m before the apex,266.23,212.857,-53.374
+smooth,corner,T1,peak brake,pedal 0-1,1.0,1.0,0.0
+smooth,corner,T1,lowest speed,m/s,15.963,16.203,0.239
+smooth,corner,T1,throttle back on,m after the apex,87.945,44.165,-43.78
+smooth,corner,T1,speed 80 m after the apex,m/s,22.333,25.799,3.465
+smooth,corner,T1,line at the apex,m towards the inside,-0.479,-0.345,0.134
+smooth,corner,T2,braking starts,m before the apex,26.678,24.529,-2.149
+smooth,corner,T2,peak brake,pedal 0-1,0.499,0.755,0.256
+smooth,corner,T2,lowest speed,m/s,15.963,16.203,0.239
+smooth,corner,T2,throttle back on,m after the apex,45.939,2.158,-43.78
+smooth,corner,T2,speed 80 m after the apex,m/s,29.98,35.358,5.377
+smooth,corner,T2,line at the apex,m towards the inside,-0.859,-0.322,0.536
+smooth,corner,T3,braking starts,m before the apex,231.381,188.69,-42.691
+smooth,corner,T3,peak brake,pedal 0-1,1.0,0.941,-0.059
+smooth,corner,T3,lowest speed,m/s,23.528,21.416,-2.112
+smooth,corner,T3,throttle back on,m after the apex,92.282,9.478,-82.804
+smooth,corner,T3,speed 80 m after the apex,m/s,27.751,29.309,1.558
+smooth,corner,T3,line at the apex,m towards the inside,-0.294,0.22,0.514
+smooth,corner,T4,braking starts,m before the apex,,,
+smooth,corner,T4,peak brake,pedal 0-1,,,
+smooth,corner,T4,lowest speed,m/s,23.966,22.123,-1.843
+smooth,corner,T4,throttle back on,m after the apex,46.275,-36.529,-82.804
+smooth,corner,T4,speed 80 m after the apex,m/s,33.514,37.165,3.651
+smooth,corner,T4,line at the apex,m towards the inside,-0.832,-0.427,0.404
+smooth,corner,T5,braking starts,m before the apex,110.648,103.088,-7.56
+smooth,corner,T5,peak brake,pedal 0-1,0.632,0.871,0.239
+smooth,corner,T5,lowest speed,m/s,37.749,37.455,-0.293
+smooth,corner,T5,throttle back on,m after the apex,43.435,36.164,-7.271
+smooth,corner,T5,speed 80 m after the apex,m/s,40.267,40.75,0.483
+smooth,corner,T5,line at the apex,m towards the inside,-0.519,0.271,0.789
+smooth,corner,T6,braking starts,m before the apex,111.796,94.658,-17.138
+smooth,corner,T6,peak brake,pedal 0-1,0.711,0.59,-0.122
+smooth,corner,T6,lowest speed,m/s,33.916,34.865,0.949
+smooth,corner,T6,throttle back on,m after the apex,42.231,24.713,-17.518
+smooth,corner,T6,speed 80 m after the apex,m/s,38.526,40.561,2.035
+smooth,corner,T6,line at the apex,m towards the inside,-0.68,0.058,0.738
+smooth,corner,T7,braking starts,m before the apex,176.53,145.97,-30.56
+smooth,corner,T7,peak brake,pedal 0-1,1.0,0.808,-0.192
+smooth,corner,T7,lowest speed,m/s,35.421,33.61,-1.811
+smooth,corner,T7,throttle back on,m after the apex,32.276,4.673,-27.603
+smooth,corner,T7,speed 80 m after the apex,m/s,39.614,41.921,2.307
+smooth,corner,T7,line at the apex,m towards the inside,-0.007,0.407,0.414
+smooth,corner,T8,braking starts,m before the apex,,,
+smooth,corner,T8,peak brake,pedal 0-1,,,
+smooth,corner,T8,lowest speed,m/s,38.822,40.491,1.669
+smooth,corner,T8,throttle back on,m after the apex,-39.079,-39.365,-0.286
+smooth,corner,T8,speed 80 m after the apex,m/s,43.016,46.672,3.656
+smooth,corner,T8,line at the apex,m towards the inside,-0.745,-1.578,-0.832
+smooth,corner,T9,braking starts,m before the apex,,,
+smooth,corner,T9,peak brake,pedal 0-1,,,
+smooth,corner,T9,lowest speed,m/s,41.425,44.13,2.705
+smooth,corner,T9,throttle back on,m after the apex,-29.801,-39.498,-9.697
+smooth,corner,T9,speed 80 m after the apex,m/s,44.149,48.775,4.626
+smooth,corner,T9,line at the apex,m towards the inside,-0.634,-0.056,0.578
+smooth,corner,T10,braking starts,m before the apex,197.23,173.58,-23.65
+smooth,corner,T10,peak brake,pedal 0-1,1.0,1.0,0.0
+smooth,corner,T10,lowest speed,m/s,39.62,38.706,-0.914
+smooth,corner,T10,throttle back on,m after the apex,49.53,32.963,-16.567
+smooth,corner,T10,speed 80 m after the apex,m/s,41.383,41.569,0.186
+smooth,corner,T10,line at the apex,m towards the inside,-1.115,-1.552,-0.437
+smooth,style,Brake pressure,B_mean_active,"pedal, 0-1",0.431,0.511,0.08
+smooth,style,Peak brake pressure,B_event_peak_mean,"pedal, 0-1",0.754,0.786,0.031
+smooth,style,Brake attack (how fast it is applied),B_apply_rate,pedal per s,13.473,3.029,-10.445
+smooth,style,Brake release,B_release_rate,pedal per s,0.469,0.736,0.268
+smooth,style,Throttle attack,T_apply_rate,pedal per s,0.465,0.776,0.31
+smooth,style,Throttle lift,T_release_rate,pedal per s,2.181,1.848,-0.333
+smooth,style,Steering corrections,S_reversals_5deg_per_km,per km,3.649,10.426,6.777
+smooth,style,Hand speed,S_mean_abs_rate,deg per s,12.524,17.34,4.816
+smooth,style,Peak steering in corners,S_corner_peak_angle,deg,64.445,64.805,0.36
+smooth,style,Distance to the track edge,L_border_mean_m,m,2.52,2.483,-0.037
+smooth,style,Apex distance,L_inside_dist_apex_m,m,2.051,1.763,-0.288
+smooth,style,Exit width,L_outside_dist_exit_m,m,3.917,4.349,0.432

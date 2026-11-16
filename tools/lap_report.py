@@ -154,10 +154,11 @@ def replay(all_laps, all_info, all_sn, geo, out):
         L = float(min(df.progress.iloc[-1] for df in laps.values()))
         segs = sectors(L)
         style = {"keys": sn.number.tolist(), "plain": [PLAIN[k] for k in sn.number], "unit": [UNIT[k] for k in sn.number],
-                 "vals": {"driver": sn.driver_run.round(4).tolist(), "keep": sn.style_kept.round(4).tolist(), "fast": sn.fastest.round(4).tolist()}}
-        vmax = float(np.ceil(max(df.speed.max() for df in laps.values()) / 10.0) * 10.0)
+                 "vals": {"driver": sn.driver_run.round(4).tolist(), "keep": sn.style_kept.round(4).tolist()}}
+        vmax = float(np.ceil(max(laps[k].speed.max() for k in ("driver", "keep")) / 10.0) * 10.0)
         out_laps = {}
-        for k, df in laps.items():
+        for k in ("driver", "keep"):
+            df = laps[k]
             tt = np.arange(0.0, float(df.t.iloc[-1]) + dt, dt)
             f = lambda c: np.interp(tt, df.t, df[c])      # noqa: E731
             out_laps[k] = {"x": np.round(f("x"), 1).tolist(), "y": np.round(f("y"), 1).tolist(), "v": np.round(f("speed"), 1).tolist(), "p": np.round(f("progress"), 1).tolist(),
@@ -168,7 +169,9 @@ def replay(all_laps, all_info, all_sn, geo, out):
                 j = int(np.argmin(np.abs(geo.s_geom - (lo + hi) / 2)))
                 zones.append({"name": nm, "a": lo, "b": hi, "x": float(geo.x_center[j]), "y": float(geo.y_center[j])})
         sectors_ = [{"name": nm, "kind": kind, "a": float(lo), "b": float(min(hi, L))} for nm, kind, lo, hi in segs]
-        data[name] = {"dt": dt, "L": L, "vmax": vmax, "laps": out_laps, "zones": zones, "sectors": sectors_, "style": style}
+        bf = out / "coaching" / "brief_data.json"
+        brief = json.loads(bf.read_text(encoding="utf-8")).get(name) if bf.is_file() else None
+        data[name] = {"dt": dt, "L": L, "vmax": vmax, "laps": out_laps, "zones": zones, "sectors": sectors_, "style": style, "brief": brief}
     (out / "replay.html").write_text(REPLAY.replace("__DATA__", json.dumps({"track": track, "drivers": data}, separators=(",", ":"))), encoding="utf-8")
 
 
