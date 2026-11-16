@@ -249,6 +249,7 @@ def main():
     ap.add_argument("--style-w", type=float, default=1.0, help="0 = no style payments (stage 1 of the curriculum: line and speed only), 1 = as before")
     ap.add_argument("--w-time", type=float, default=1.0, help="weight of the lap-time term (0 in stage 1 of the curriculum)")
     ap.add_argument("--ped-w", type=float, default=0.0, help="weight of -|pedal axis - the track line's pedal axis here| per step: brake where the line brakes (a dense training aid, fades with --ped-decay)")
+    ap.add_argument("--steer-w", type=float, default=0.0, help="weight of -|steering - the pure-pursuit steering on the track line here| per step (fades with --ped-decay)")
     ap.add_argument("--ped-decay", type=int, default=0, help="steps over which --ped-w fades linearly to 0 (0 = no fade)")
     args = ap.parse_args()
     if (args.residual or args.pedal_axis) and not args.no_warm_start:
@@ -264,7 +265,7 @@ def main():
     env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command,
                   line_w=args.line_w, line_delta=args.line_delta, line_decay=args.line_decay, line_floor=args.line_floor, prog_w=args.prog_w, style_dense=args.style_dense, style_clip=args.style_clip,
                   start_speed_lo=args.start_speed_lo, residual=args.residual, res_steer=args.res_steer, res_pedal=args.res_pedal, pedal_axis=args.pedal_axis,
-                  steer_auth=args.steer_auth, speed_w=args.speed_w, style_w=args.style_w, ped_w=args.ped_w, ped_decay=args.ped_decay, weights=({"time": args.w_time} if args.w_time != 1.0 else None))
+                  steer_auth=args.steer_auth, speed_w=args.speed_w, style_w=args.style_w, ped_w=args.ped_w, ped_decay=args.ped_decay, steer_w=args.steer_w, weights=({"time": args.w_time} if args.w_time != 1.0 else None))
     env = Monitor(Style12Env(seed=args.seed, **env_kw))
     eval_env = Style12Env(seed=args.seed + 7, **{**env_kw, "rand_start": 0.0})
     lib = Library(args.out, state.get("library_n", 0))
