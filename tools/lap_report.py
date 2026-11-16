@@ -155,12 +155,14 @@ def fig_corners(name, laps, info, segs, sec, geo, corners, out):
     fig, axs = plt.subplots(2, 2, figsize=(12.5, 9.6))
     for ax, (nm, kind, lo, hi) in zip(axs.ravel(), zs):
         gm = (geo.s_geom >= lo) & (geo.s_geom <= hi)
-        ax.plot(geo.x_left[gm], geo.y_left[gm], color="#999999", lw=1.2)
-        ax.plot(geo.x_right[gm], geo.y_right[gm], color="#999999", lw=1.2)
-        for k in THREE:
+        xl, yl, xr, yr = (geo[c][gm].to_numpy() for c in ("x_left", "y_left", "x_right", "y_right"))
+        ax.fill(np.concatenate([xl, xr[::-1]]), np.concatenate([yl, yr[::-1]]), color="#efefef", lw=0, zorder=0)       # the track surface
+        ax.plot(xl, yl, color="#b5b5b5", lw=0.9, zorder=1)
+        ax.plot(xr, yr, color="#b5b5b5", lw=0.9, zorder=1)
+        for k in ("keep", "fast", "driver"):
             d = laps[k]
             m = (d.progress >= lo) & (d.progress <= hi)
-            ax.plot(d.x[m], d.y[m], color=COL[k], lw=2.0 if k != "driver" else 1.8, label=NAME[k], zorder=3 if k != "driver" else 2)
+            ax.plot(d.x[m], d.y[m], color=COL[k], lw=2.4 if k == "driver" else 2.0, ls="--" if k == "driver" else "-", label=NAME[k], zorder=4 if k == "driver" else 3)
         for r in corners.itertuples():
             if lo <= r.s_apex <= hi:
                 j = int(np.argmin(np.abs(geo.s_geom - r.s_apex)))
@@ -175,7 +177,7 @@ def fig_corners(name, laps, info, segs, sec, geo, corners, out):
     axs[0, 0].legend(frameon=False, fontsize=8, loc="best")
     for ax in axs.ravel()[len(zs):]:
         ax.axis("off")
-    fig.suptitle(f"{name}: the line in each corner zone (map view, grey = track edges, dots = corner apexes)", x=0.01, ha="left", fontsize=13)
+    fig.suptitle(f"{name}: the line in each corner zone (map view; light grey = the track, black dots = corner apexes, dashed dark grey = the driver's run)", x=0.01, ha="left", fontsize=12)
     fig.tight_layout()
     fig.savefig(out / f"{name}_3_lines_per_corner.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
