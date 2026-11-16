@@ -1,20 +1,20 @@
 # Lap comparison for coaching (2026-11-16)
 
-The driver's run against RL laps, for the attacker and the smooth driver. All laps are the same car on the same track (Monza, OCD simulator), started on the line.
+The driver's run against RL laps, for the attacker and the smooth driver (two artificial drivers of our driver model). All laps are the same car on the same track (Monza, OCD simulator), started on the line.
 
 | lap | what it is |
 |---|---|
 | driver's run | the pure-pursuit driver on the driver's own mapped line (the simulator twin of the driver; not a human lap) |
-| RL lap, small gain | an RL lap only a little faster than the driver's run (target gain 0.5 s) that stays within the style budget D <= D(driver's run) + 0.05 |
-| RL lap, style kept | the fastest on-track RL lap whose style distance D is at most D(driver's run) + 0.05 |
+| RL lap, small gain | an RL lap only a little faster than the driver's run (target gain 0.5 s) that stays within the style budget of the driver's run |
+| RL lap, style kept | the fastest on-track RL lap that stays within the same style budget |
 | RL fastest lap | the fastest on-track RL lap, whatever its style |
 
 | driver | driver's run | RL small gain | RL style kept | RL fastest |
 |---|---|---|---|---|
-| attacker | 119.80 s, D 0.73 | 119.32 s, D 0.74 | 116.52 s, D 0.69 | 116.36 s, D 0.78 |
-| smooth | 120.92 s, D 1.06 | 120.08 s, D 1.08 | 117.36 s, D 1.10 | 116.88 s, D 1.24 |
+| attacker | 119.80 s | 119.32 s | 116.52 s | 116.36 s |
+| smooth | 120.92 s | 120.08 s | 117.36 s | 116.88 s |
 
-All style numbers in the figures and tables are the real values in their own units (brake and throttle pedal 0-1 or per second, steering per km, degrees, degrees per second, metres). Only D, the quantity the problem constrains, is a combined measure: the mean over the 12 numbers of |lap - target| divided by the spread of that number between real driver-track cells (0 = identical).
+All style numbers are shown as they are, each in its own unit (brake and throttle pedal 0-1 or per second, steering per km, degrees, degrees per second, metres). No target and no normalised values are shown. The style budget used to pick the "style kept" and "small gain" laps is the combined style distance of the problem; the per-lap values are in the training run's `library.csv`.
 
 ## How to open the replay
 
@@ -29,23 +29,21 @@ In the page:
 ## Figures (per driver)
 
 Style (values as they are, each in its own unit):
-- `<driver>_2_style.png`: the 12 style numbers of the four laps and the driver's target, one small plot per number.
-- `<driver>_6_style_change.png`: how much each number changes from the driver's run to each RL lap, in the number's unit; the diamond shows where the target is.
+- `<driver>_2_style.png`: the 12 style numbers of the four laps, one small plot per number (dashed grey line = the driver's run).
+- `<driver>_6_style_change.png`: how much each number changes from the driver's run to each RL lap, in the number's unit.
 - `<driver>_5_style_vs_lap_time.png`: each of the 12 numbers against lap time, every on-track lap of the run in grey.
-- `<driver>_7_style_distance_vs_lap_time.png`: the style distance D against lap time, every on-track lap of the run in grey.
 
 Lap time and driving:
 - `<driver>_1_lap_time.png`: lap times, time gained per sector, gap to the driver's run along the lap.
 - `<driver>_3_lines_per_corner.png`: the line on the map in each corner zone (driver, style kept, fastest).
 - `<driver>_4_driving.png`: speed, throttle, brake and steering along the lap (driver, style kept, fastest).
 
-Tables: `summary.csv`, `<driver>_sectors.csv`, `<driver>_style_numbers.csv` (the numbers with their target and spread).
+Tables: `summary.csv`, `<driver>_sectors.csv`, `<driver>_style_numbers.csv`.
 
 ## What it shows
 
-- **Lap time.** The RL laps gain most in T3-T6, then T1-2, T10 and T7-9 (attacker, style-kept lap: 0.95, 0.87, 0.70 and 0.50 s of its 3.28 s). On top of the track's own line and speed plan, RL adds 1.16 s (attacker) and 0.32 s (smooth). In the corner zones the lines of all laps are within about 1 m of each other (mean difference 0.4-0.7 m); the differences are in braking and corner speed.
-- **How the style changes (attacker, driver's run to style-kept lap).** Steering corrections 7.99 to 18.94 per km (target 23.46); hand speed 16.01 to 25.15 deg/s (target 24.17); brake pressure 0.68 to 0.56 (target 0.73); peak brake pressure 0.98 to 0.84 (target 0.88); brake attack 6.26 to 8.85 pedal/s (target 5.08); brake release 0.62 to 1.00 (target 0.69); throttle attack 1.06 to 0.72 (target 0.78); distance to the track edge 2.20 to 2.51 m (target 2.12). The line numbers barely change: peak steering in corners 66.11 to 67.15 deg, apex distance 1.68 to 1.61 m, exit width 4.04 to 4.01 m.
-- **Towards or away from the target.** The steering numbers move toward the target and the braking numbers (attack, release, pressure) away from it. D falls from 0.73 to 0.69 because the steering moves are large.
-- **Important.** D is the distance to the target, not to the driver's run. Even the small-gain lap changes the style a lot (steering corrections 7.99 to 17.38 per km, throttle lift 1.77 to 0.95 pedal/s, brake pressure 0.68 to 0.54), and so do nearly all RL laps of the run, whatever their lap time (figures 5 and 7). So "style kept" means: as far from the target as the driver's run is, not the same style as the driver's run.
+- **Lap time.** The RL laps gain most in T3-T6, then T1-2, T10 and T7-9 (attacker, style-kept lap: 0.95, 0.87, 0.70 and 0.50 s of its 3.28 s). In the corner zones the lines of all laps are within about 1 m of each other (mean difference 0.4-0.7 m); the differences are in braking and corner speed.
+- **How the style changes (attacker, driver's run to style-kept lap).** Steering corrections 7.99 to 18.94 per km; hand speed 16.01 to 25.15 deg/s; brake pressure 0.68 to 0.56; peak brake pressure 0.98 to 0.84; brake attack 6.26 to 8.85 pedal/s; brake release 0.62 to 1.00 pedal/s; throttle attack 1.06 to 0.72 pedal/s; distance to the track edge 2.20 to 2.51 m. The line numbers barely change: peak steering in corners 66.11 to 67.15 deg, apex distance 1.68 to 1.61 m, exit width 4.04 to 4.01 m.
+- **The style changes even for a small gain.** The small-gain lap (0.48 s faster) already differs a lot from the driver's run (steering corrections 7.99 to 17.38 per km, throttle lift 1.77 to 0.95 pedal/s, brake pressure 0.68 to 0.54), and so do nearly all RL laps of the run, whatever their lap time (figure 5).
 
 Made by `tools/lap_compare.py` (lap selection, on the pod), `tools/lap_report.py` and `tools/replay_template.html` (figures and replay) from the runs `res1/attacker` and `res1/smooth` (residual mode: pure pursuit plus a bounded RL correction).

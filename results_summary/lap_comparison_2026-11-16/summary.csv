@@ -1,9 +1,9 @@
-driver,lap,lap_time_s,style_distance_D,gain_vs_driver_run_s,gain_vs_no_RL_line_s,source
-attacker,driver's run,119.8,0.734,0.0,-2.12,baseline_pure_pursuit_driver.csv
-attacker,"RL lap, small gain",119.32,0.74,0.48,-1.64,train step 153547 (laps/train_39.npz)
-attacker,"RL lap, style kept",116.52,0.688,3.28,1.16,eval step 964540 (laps/eval_step_964540.csv)
-attacker,RL fastest lap,116.36,0.785,3.44,1.32,eval step 540000 (laps/eval_step_540000.csv)
-smooth,driver's run,120.92,1.057,0.0,-3.24,baseline_pure_pursuit_driver.csv
-smooth,"RL lap, small gain",120.08,1.085,0.84,-2.4,eval step 400000 (laps/eval_step_400000.csv)
-smooth,"RL lap, style kept",117.36,1.097,3.56,0.32,eval step 919385 (laps/eval_step_919385.csv)
-smooth,RL fastest lap,116.88,1.236,4.04,0.8,train step 1204595 (laps/train_398.npz)
+driver,lap,lap_time_s,gain_vs_driver_run_s,gain_vs_no_RL_line_s,source
+attacker,driver's run,119.8,0.0,-2.12,baseline_pure_pursuit_driver.csv
+attacker,"RL lap, small gain",119.32,0.48,-1.64,train step 153547 (laps/train_39.npz)
+attacker,"RL lap, style kept",116.52,3.28,1.16,eval step 964540 (laps/eval_step_964540.csv)
+attacker,RL fastest lap,116.36,3.44,1.32,eval step 540000 (laps/eval_step_540000.csv)
+smooth,driver's run,120.92,0.0,-3.24,baseline_pure_pursuit_driver.csv
+smooth,"RL lap, small gain",120.08,0.84,-2.4,eval step 400000 (laps/eval_step_400000.csv)
+smooth,"RL lap, style kept",117.36,3.56,0.32,eval step 919385 (laps/eval_step_919385.csv)
+smooth,RL fastest lap,116.88,4.04,0.8,train step 1204595 (laps/train_398.npz)

@@ -190,7 +190,7 @@ function build(){ D = DATA.drivers[$("drv").value];
   D.gs = 5; D.gn = Math.floor(D.L / D.gs) + 1; D.gv = {}; D.gt = {};
   for (const k of ORDER){ const lap = D.laps[k], arr = []; for (let j = 0; j < D.gn; j++){ const p = j * D.gs, i = idx(lap, p); arr.push(i === 0 ? lap.v[0] : lap.v[i - 1] + (lap.v[i] - lap.v[i - 1]) * (lap.p[i] > lap.p[i - 1] ? Math.min(1, Math.max(0, (p - lap.p[i - 1]) / (lap.p[i] - lap.p[i - 1]))) : 0)); } D.gv[k] = arr; }
   for (const k of ORDER){ const lap = D.laps[k]; D.gt[k] = []; for (let j = 0; j < D.gn; j++) D.gt[k].push(tAtP(lap, j * D.gs) - tAtP(D.laps.driver, j * D.gs)); }
-  $("tab").innerHTML = "<tr><th>lap</th><th>lap time</th><th>D</th><th>speed</th><th>gap</th><th id='hd_a'>ahead</th></tr>" + ORDER.map(k => `<tr><td><input type="checkbox" data-k="${k}" ${on[k] ? "checked" : ""}><span class="sw" style="background:${COL[k]}"></span>${NAME[k]}</td><td>${D.laps[k].lap_time.toFixed(2)} s</td><td>${D.laps[k].D.toFixed(2)}</td><td id="v_${k}"></td><td id="g_${k}"></td><td id="a_${k}"></td></tr>`).join("");
+  $("tab").innerHTML = "<tr><th>lap</th><th>lap time</th><th>speed</th><th>gap</th><th id='hd_a'>ahead</th></tr>" + ORDER.map(k => `<tr><td><input type="checkbox" data-k="${k}" ${on[k] ? "checked" : ""}><span class="sw" style="background:${COL[k]}"></span>${NAME[k]}</td><td>${D.laps[k].lap_time.toFixed(2)} s</td><td id="v_${k}"></td><td id="g_${k}"></td><td id="a_${k}"></td></tr>`).join("");
   $("tab").querySelectorAll("input").forEach(c => c.onchange = () => { on[c.dataset.k] = c.checked; draw(); });
   const rows = [{name:"whole lap", a:0, b:D.L, kind:"all"}].concat(D.sectors);
   $("sectab").innerHTML = "<tr><th>sector</th><th>m</th><th>driver</th>" + ["small","keep","fast"].map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
@@ -198,9 +198,8 @@ function build(){ D = DATA.drivers[$("drv").value];
       return `<tr class="row" data-i="${i - 1}"><td>${s.name}</td><td>${Math.round(s.a)}-${Math.round(s.b)}</td><td>${tt.driver.toFixed(2)}</td>` + ["small","keep","fast"].map(k => { const d = tt[k] - tt.driver; return `<td class="${d < 0 ? "neg" : "pos"}">${d >= 0 ? "+" : ""}${d.toFixed(2)}</td>`; }).join("") + "</tr>"; }).join("");
   $("sectab").querySelectorAll("tr.row").forEach(r => r.onclick = () => { $("sec").value = r.dataset.i; setSector(); });
   $("sec").innerHTML = "<option value='-1'>whole lap</option>" + D.sectors.map((s, i) => `<option value='${i}'>${s.name}  (${Math.round(s.a)}-${Math.round(s.b)} m)</option>`).join("");
-  const S_ = D.style; $("sty").innerHTML = "<tr><th>style number [unit]</th><th>target</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
-    S_.keys.map((key, i) => `<tr><td title="${key}">${S_.plain[i]} [${S_.unit[i]}]</td><td>${S_.target[i].toFixed(2)}</td>` + ORDER.map(k => `<td>${S_.vals[k][i].toFixed(2)}</td>`).join("") + "</tr>").join("") +
-    `<tr><td><b>D = distance of the 12 numbers to the target (the constrained quantity)</b></td><td>0</td>` + ORDER.map(k => `<td><b>${D.laps[k].D.toFixed(2)}</b></td>`).join("") + "</tr>";
+  const S_ = D.style; $("sty").innerHTML = "<tr><th>style number [unit]</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
+    S_.keys.map((key, i) => `<tr><td title="${key}">${S_.plain[i]} [${S_.unit[i]}]</td>` + ORDER.map(k => `<td>${S_.vals[k][i].toFixed(2)}</td>`).join("") + "</tr>").join("");
   sec = null; $("sec").value = "-1"; fit(); t = 0; draw(); }
 function setSector(){ const i = parseInt($("sec").value); sec = i < 0 ? null : D.sectors[i]; document.querySelectorAll("#sectab tr.row").forEach(r => r.classList.toggle("sel", parseInt(r.dataset.i) === i)); fit(); t = sec ? tRange()[0] : 0; draw(); }
 function setView(){ const chase = $("view").value === "chase"; $("camlab").style.display = $("modelab").style.display = chase ? "" : "none"; $("hint").textContent = chase ? "drag = look around the car, wheel = closer / further, double-click = reset the camera" : "drag = move, wheel = zoom, double-click = reset"; draw(); }

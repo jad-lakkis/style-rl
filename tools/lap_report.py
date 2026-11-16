@@ -136,32 +136,29 @@ def _title(key):
 
 
 def fig_style(name, sn, info, out):
-    """The 12 style numbers as they are (no normalisation), each in its own unit: target and the four laps."""
+    """The 12 style numbers as they are (no normalisation), each in its own unit, for the four laps; the grey line marks the driver's run."""
     keys = sn.number.tolist()
-    tgt = sn.target.to_numpy(float)
     v = _vals(sn)
-    rows = [("target", "target"), ("driver", "driver's run"), ("small", "small gain"), ("keep", "style kept"), ("fast", "fastest")]
-    fig, axs = plt.subplots(4, 3, figsize=(14.5, 12.5))
+    rows = [("driver", "driver's run"), ("small", "small gain"), ("keep", "style kept"), ("fast", "fastest")]
+    fig, axs = plt.subplots(4, 3, figsize=(14.5, 11.5))
     for i, (ax, key) in enumerate(zip(axs.ravel(), keys)):
         ys = np.arange(len(rows))[::-1]
-        allv = [tgt[i]] + [v[k][i] for k in ("driver", "small", "keep", "fast")]
+        allv = [v[k][i] for k, _ in rows]
         lo, hi = min(allv), max(allv)
         pad = max(hi - lo, 1e-6) * 0.25
-        ax.axvline(tgt[i], color="#000000", lw=1.0, ls="--", zorder=1)
+        ax.axvline(v["driver"][i], color=COL["driver"], lw=1.0, ls="--", zorder=1)
         for yi, (k, lab) in zip(ys, rows):
-            val = tgt[i] if k == "target" else v[k][i]
-            if k != "target":
-                ax.plot([tgt[i], val], [yi, yi], color="#d0d0d0", lw=1.2, zorder=1)
-            ax.scatter([val], [yi], s=62, marker="D" if k == "target" else "o", color="#000000" if k == "target" else COL[k], zorder=3, edgecolors="white", linewidths=0.7)
-            ax.text(val, yi + 0.34, f"{val:.2f}", va="bottom", ha="center", fontsize=8.5)
+            val = v[k][i]
+            ax.scatter([val], [yi], s=70, color=COL[k], zorder=3, edgecolors="white", linewidths=0.7)
+            ax.text(val, yi + 0.3, f"{val:.2f}", va="bottom", ha="center", fontsize=8.5)
         ax.set_yticks(ys)
         ax.set_yticklabels([lab for _, lab in rows], fontsize=8.5)
-        ax.set_ylim(-0.6, len(rows) - 0.1)
+        ax.set_ylim(-0.6, len(rows) - 0.2)
         ax.set_xlim(lo - pad, hi + pad)
         ax.set_title(_title(key), loc="left", fontsize=9.5)
         ax.set_xlabel(UNIT[key], fontsize=8.5)
         style_axes(ax)
-    fig.suptitle(f"{name}: the 12 style numbers of each lap, as they are (dashed line = the driver's target)", x=0.01, ha="left", fontsize=13)
+    fig.suptitle(f"{name}: the 12 style numbers of each lap, as they are (dashed grey line = the driver's run)", x=0.01, ha="left", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
     fig.savefig(out / f"{name}_2_style.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
@@ -170,12 +167,10 @@ def fig_style(name, sn, info, out):
 def fig_metrics(name, sn, info, lib, out):
     """Each of the 12 style numbers (as they are, in their own unit) against lap time: every on-track lap of the run (grey), the four laps (colour) and the target."""
     keys = sn.number.tolist()
-    tgt = sn.target.to_numpy(float)
     vals = {"driver": sn.driver_run.to_numpy(float), "small": sn.small.to_numpy(float), "keep": sn.style_kept.to_numpy(float), "fast": sn.fastest.to_numpy(float)}
     ok = lib[lib.lap_time.notna() & (lib.off_share <= 1e-3) & (lib.start_m.fillna(0.0) < 1.0)]
     fig, axs = plt.subplots(4, 3, figsize=(14, 12.5))
     for i, (ax, key) in enumerate(zip(axs.ravel(), keys)):
-        ax.axhline(tgt[i], color="#000000", lw=1.0, ls="--")
         ax.scatter(ok.lap_time, ok[key], s=7, color="#c8c8c8", zorder=1, linewidths=0)
         order = sorted(FOUR, key=lambda k: -info[k]["lap_time"])
         ax.plot([info[k]["lap_time"] for k in order], [vals[k][i] for k in order], color="#999999", lw=0.9, zorder=2)
@@ -188,7 +183,7 @@ def fig_metrics(name, sn, info, lib, out):
         if i >= 9:
             ax.set_xlabel("lap time, s", fontsize=9)
     handles = [plt.Line2D([], [], marker="o", ls="", color=COL[k], label=f"{NAME[k]}  {info[k]['lap_time']:.2f} s") for k in FOUR]
-    handles += [plt.Line2D([], [], marker="o", ls="", color="#c8c8c8", label=f"all {len(ok)} on-track laps of the run"), plt.Line2D([], [], color="#000000", ls="--", label="the driver's target")]
+    handles += [plt.Line2D([], [], marker="o", ls="", color="#c8c8c8", label=f"all {len(ok)} on-track laps of the run")]
     fig.legend(handles=handles, loc="upper center", ncol=3, frameon=False, fontsize=9, bbox_to_anchor=(0.5, 0.965))
     fig.suptitle(f"{name}: the 12 style numbers against lap time", x=0.01, ha="left", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.93))
@@ -197,15 +192,13 @@ def fig_metrics(name, sn, info, lib, out):
 
 
 def fig_style_change(name, sn, info, out):
-    """How much each style number changes from the driver's run to each RL lap, in the number's own unit; the diamond marks where the target is."""
+    """How much each style number changes from the driver's run to each RL lap, in the number's own unit."""
     keys = sn.number.tolist()
-    tgt = sn.target.to_numpy(float)
     v = _vals(sn)
-    fig, axs = plt.subplots(4, 3, figsize=(14.5, 11.5))
+    fig, axs = plt.subplots(4, 3, figsize=(14.5, 11.0))
     for i, (ax, key) in enumerate(zip(axs.ravel(), keys)):
         ds = {k: v[k][i] - v["driver"][i] for k in ("small", "keep", "fast")}
-        tg = tgt[i] - v["driver"][i]
-        allv = list(ds.values()) + [tg, 0.0]
+        allv = list(ds.values()) + [0.0]
         lo, hi = min(allv), max(allv)
         pad = max(hi - lo, 1e-6) * 0.22
         ax.axvline(0, color=COL["driver"], lw=1.4, zorder=2)
@@ -213,41 +206,16 @@ def fig_style_change(name, sn, info, out):
             yi = 2 - j
             ax.barh(yi, ds[k], height=0.55, color=COL[k], zorder=3)
             ax.text(ds[k] + (pad * 0.12 if ds[k] >= 0 else -pad * 0.12), yi, f"{ds[k]:+.2f}", va="center", ha="left" if ds[k] >= 0 else "right", fontsize=9)
-        ax.scatter([tg], [1], s=95, marker="D", color="#000000", zorder=4, edgecolors="white", linewidths=0.8)
-        ax.annotate("target", (tg, 1), textcoords="offset points", xytext=(0, 12), ha="center", fontsize=8)
         ax.set_yticks([2, 1, 0])
         ax.set_yticklabels(["small gain", "style kept", "fastest"], fontsize=8.5)
-        ax.set_ylim(-0.6, 2.7)
+        ax.set_ylim(-0.6, 2.6)
         ax.set_xlim(lo - pad * 1.6, hi + pad * 1.6)
         ax.set_title(f"{_title(key)}\ndriver's run = {v['driver'][i]:.2f}", loc="left", fontsize=9.5)
         ax.set_xlabel(f"change from the driver's run [{UNIT[key]}]", fontsize=8.5)
         style_axes(ax)
-    fig.suptitle(f"{name}: how much each style number changes from the driver's run (0 = unchanged; diamond = where the target is)", x=0.01, ha="left", fontsize=13)
+    fig.suptitle(f"{name}: how much each style number changes from the driver's run (0 = unchanged)", x=0.01, ha="left", fontsize=13)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
     fig.savefig(out / f"{name}_6_style_change.png", dpi=130, bbox_inches="tight")
-    plt.close(fig)
-
-
-def fig_tradeoff(name, sn, info, lib, out):
-    """Lap time against the style distance D to the target, for every on-track lap of the run."""
-    ok = lib[lib.lap_time.notna() & (lib.off_share <= 1e-3) & (lib.start_m.fillna(0.0) < 1.0)].copy()
-    fig, a1 = plt.subplots(figsize=(9.5, 6.4))
-    d_drv = info["driver"]["D"]
-    a1.scatter(ok.lap_time, ok.D, s=10, color="#c8c8c8", linewidths=0, zorder=1)
-    a1.axhline(d_drv, color=COL["driver"], lw=1.2, ls="--")
-    a1.axhline(d_drv + 0.05, color="#999999", lw=0.9, ls=":")
-    a1.text(ok.lap_time.max(), d_drv + 0.012, "driver's run", ha="right", va="bottom", fontsize=8, color=COL["driver"])
-    a1.text(ok.lap_time.max(), d_drv + 0.062, "budget for 'style kept' (driver's D + 0.05)", ha="right", va="bottom", fontsize=8, color="#777777")
-    for k in ("driver", "small", "keep", "fast"):
-        a1.scatter([info[k]["lap_time"]], [info[k]["D"]], s=95, color=COL[k], zorder=4, edgecolors="white", linewidths=0.9, label=f"{NAME[k]}  {info[k]['lap_time']:.2f} s, D {info[k]['D']:.2f}")
-    a1.scatter([], [], s=10, color="#c8c8c8", label=f"all {len(ok)} on-track laps of the run")
-    a1.set_xlabel("lap time, s")
-    a1.set_ylabel("D = style distance to the driver's target\n(the mean over the 12 numbers of |lap - target| / spread between real drivers)")
-    a1.set_title(f"{name}: the style distance D against lap time", loc="left", fontsize=12)
-    a1.legend(frameon=False, fontsize=9, loc="upper right", bbox_to_anchor=(1.0, 1.0))
-    style_axes(a1)
-    fig.tight_layout()
-    fig.savefig(out / f"{name}_7_style_distance_vs_lap_time.png", dpi=130, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -312,8 +280,7 @@ def replay(all_laps, all_info, all_sn, geo, corners, out):
         info, sn = all_info[name], all_sn[name]
         L = float(min(df.progress.iloc[-1] for df in laps.values()))
         segs = sectors(L)
-        style = {"keys": sn.number.tolist(), "plain": [PLAIN[k] for k in sn.number], "unit": [UNIT[k] for k in sn.number], "target": sn.target.round(4).tolist(), "spread": sn.spread.round(4).tolist(),
-                 "vals": {"driver": sn.driver_run.round(4).tolist(), "small": sn.small.round(4).tolist(), "keep": sn.style_kept.round(4).tolist(), "fast": sn.fastest.round(4).tolist()}}
+        style = {"keys": sn.number.tolist(), "plain": [PLAIN[k] for k in sn.number], "unit": [UNIT[k] for k in sn.number], "vals": {"driver": sn.driver_run.round(4).tolist(), "small": sn.small.round(4).tolist(), "keep": sn.style_kept.round(4).tolist(), "fast": sn.fastest.round(4).tolist()}}
         vmax = float(np.ceil(max(df.speed.max() for df in laps.values()) / 10.0) * 10.0)
         out_laps = {}
         for k, df in laps.items():
@@ -351,14 +318,13 @@ def main():
         fig_style(name, sn, info, a.out)
         fig_metrics(name, sn, info, lib, a.out)
         fig_style_change(name, sn, info, a.out)
-        fig_tradeoff(name, sn, info, lib, a.out)
         fig_corners(name, laps, info, segs, sec, geo, corners, a.out)
         fig_driving(name, at, g, segs, a.out)
         all_laps[name], all_info[name], all_sn[name] = laps, info, sn
         for k in FOUR:
-            summary.append({"driver": name, "lap": NAME[k], "lap_time_s": info[k]["lap_time"], "style_distance_D": info[k]["D"], "gain_vs_driver_run_s": info["driver"]["lap_time"] - info[k]["lap_time"],
+            summary.append({"driver": name, "lap": NAME[k], "lap_time_s": info[k]["lap_time"], "gain_vs_driver_run_s": info["driver"]["lap_time"] - info[k]["lap_time"],
                             "gain_vs_no_RL_line_s": info["base"]["lap_time"] - info[k]["lap_time"], "source": info[k]["source"]})
-        sn.to_csv(a.out / f"{name}_style_numbers.csv", index=False)
+        sn[["number", "driver_run", "small", "style_kept", "fastest"]].to_csv(a.out / f"{name}_style_numbers.csv", index=False)
     pd.DataFrame(summary).round(3).to_csv(a.out / "summary.csv", index=False)
     replay(all_laps, all_info, all_sn, geo, corners, a.out)
     print(pd.DataFrame(summary).round(2).to_string(index=False))
