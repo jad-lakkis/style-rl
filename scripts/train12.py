@@ -41,7 +41,7 @@ def run_lap12(env, policy=None, start=0.0, max_steps=9000):
     obs, _ = env.reset(seed=0, options={"start": start})
     info = {}
     for _ in range(max_steps):
-        a = np.array(env._base[:3], np.float32) if policy is None else policy.predict(obs, deterministic=True)[0]
+        a = env.base_action() if policy is None else policy.predict(obs, deterministic=True)[0]
         obs, r, term, trunc, info = env.step(a)
         if term or trunc:
             break
@@ -240,7 +240,13 @@ def main():
     ap.add_argument("--start-speed-lo", type=float, default=0.85, help="a training lap that starts at a random point starts at between this share and 1.0 of the line's speed there")
     ap.add_argument("--init-log-std-scratch", action="store_true", help="with --no-warm-start: also start the policy's own noise at --init-log-std (tiny), so that the exploration is the correlated noise")
     ap.add_argument("--init-throttle", type=float, default=0.0, help="with --no-warm-start: the untrained policy's mean throttle (a bias, so that the car drives forward from the first step)")
+    ap.add_argument("--pedal-axis", action="store_true", help="the agent's action is (steering, one pedal axis: above 0 throttle, below 0 brake) instead of (steering, throttle, brake); needs --no-warm-start")
+    ap.add_argument("--residual", action="store_true", help="the pure-pursuit driver steers and sets the pedals, the agent adds a bounded correction (implies --pedal-axis; needs --no-warm-start --bc-weight 0)")
+    ap.add_argument("--res-steer", type=float, default=0.1, help="largest steering correction of the agent (steering is -1..1)")
+    ap.add_argument("--res-pedal", type=float, default=0.2, help="largest correction of the agent on the pedal axis (-1..1)")
     args = ap.parse_args()
+    if (args.residual or args.pedal_axis) and not args.no_warm_start:
+        ap.error("--residual / --pedal-axis have two action numbers; the warm start copies a three-number base command: use --no-warm-start --bc-weight 0")
     torch.set_num_threads(args.threads)
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
     if args.train_freq == 0:
@@ -251,7 +257,7 @@ def main():
     state = json.loads(state_f.read_text()) if state_f.is_file() else {}
     env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command,
                   line_w=args.line_w, line_delta=args.line_delta, line_decay=args.line_decay, line_floor=args.line_floor, prog_w=args.prog_w, style_dense=args.style_dense, style_clip=args.style_clip,
-                  start_speed_lo=args.start_speed_lo)
+                  start_speed_lo=args.start_speed_lo, residual=args.residual, res_steer=args.res_steer, res_pedal=args.res_pedal, pedal_axis=args.pedal_axis)
     env = Monitor(Style12Env(seed=args.seed, **env_kw))
     eval_env = Style12Env(seed=args.seed + 7, **{**env_kw, "rand_start": 0.0})
     lib = Library(args.out, state.get("library_n", 0))
@@ -274,8 +280,8 @@ def main():
                 if args.init_throttle > 0:
                     model.actor.mu.bias[1] = float(np.arctanh(min(args.init_throttle, 0.95)))      # the mean action is tanh(mu): this is the throttle of the untrained policy
     theta = 1.0 / args.ou_tau       # exploration noise: Ornstein-Uhlenbeck, stationary standard deviation = the --ou-* values, correlation time --ou-tau steps
-    stat = np.array([args.ou_steer, args.ou_throttle, args.ou_brake])
-    model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(3), sigma=stat * np.sqrt(2 * theta), theta=theta, dt=1.0)
+    stat = np.array([args.ou_steer, args.ou_throttle] if env.action_space.shape[0] == 2 else [args.ou_steer, args.ou_throttle, args.ou_brake])     # with one pedal axis --ou-throttle is the noise of that axis
+    model.action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(len(stat)), sigma=stat * np.sqrt(2 * theta), theta=theta, dt=1.0)
     formats = ["csv", "stdout"]
     try:
         import tensorboard  # noqa: F401

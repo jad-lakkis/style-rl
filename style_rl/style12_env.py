@@ -2,7 +2,10 @@
 
 What the agent sees: the car state, the track's own (driver-independent) line ahead (the neutral line: minimum-curvature line, its speed profile and curvature, and the command a
 pure-pursuit driver on that line would give), the TARGET 12 numbers, the agent's running 12 numbers of this lap and the lap fraction. It never sees the driver's own line or pedals.
-What it does: steering, throttle, brake (pure mode).
+What it does: steering, throttle, brake (pure mode). Two options change the action space (both off by default, so the existing runs are unchanged):
+  pedal_axis  two numbers (steering, ONE pedal axis: above 0 throttle, below 0 brake) instead of three. With two pedals, each clipped at 0, half of every pedal's range does nothing and has no gradient.
+  residual    (implies pedal_axis) the pure-pursuit base driver steers and sets the pedals, the agent adds a bounded correction: steering + res_steer x a[0], pedal axis + res_pedal x a[1].
+              The car then drives the lap by itself (about the neutral lap) and the agent only learns what to change for the style and for speed.
 What it is paid:
   time    every step: c_time x (what the neutral lap would need for the distance just driven - the time the step took). Over the lap this adds up to c_time x (neutral lap time - lap time):
           faster than the neutral lap is rewarded, slower is punished, and leaving the track gives no way out of it.
@@ -38,8 +41,12 @@ class Style12Env(gym.Env):
     metadata = {"render_modes": []}
 
     def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False,
-                 line_w=0.0, line_delta=1.0, line_cap=6.0, line_decay=0, line_floor=0.4, prog_w=0.0, style_dense=0.0, style_clip=4.0, start_speed_lo=0.85):
+                 line_w=0.0, line_delta=1.0, line_cap=6.0, line_decay=0, line_floor=0.4, prog_w=0.0, style_dense=0.0, style_clip=4.0, start_speed_lo=0.85,
+                 residual=False, res_steer=0.1, res_pedal=0.2, pedal_axis=False):
         super().__init__()
+        self.residual = residual                    # True: the pure-pursuit driver steers and sets the pedals, the agent adds a bounded correction (+-res_steer on the steering, +-res_pedal on the pedal axis)
+        self.res_steer, self.res_pedal = res_steer, res_pedal
+        self.pedal_axis = bool(pedal_axis or residual)   # ONE pedal axis instead of throttle + brake: above 0 throttle, below 0 brake. (Two pedals clipped at 0 have a dead half where nothing happens and no gradient.)
         self.hide_base = hide_base      # True: the pure-pursuit command is not part of the observation (the agent has to learn to drive by itself; the track's line and speeds are still given)
         self.line_w, self.line_delta, self.line_cap, self.line_decay, self.line_floor = line_w, line_delta, line_cap, int(line_decay), line_floor
         self.prog_w, self.style_dense, self.style_clip, self.start_speed_lo = prog_w, style_dense, style_clip, start_speed_lo
@@ -65,7 +72,7 @@ class Style12Env(gym.Env):
         self.t_lap = float(r.t[-1] + r.ds / max(r.v[-1], 1.0))
         self.target_z = np.clip((self.target - self.prior) / self.tg.spread, -5, 5).astype(np.float32)
         self.observation_space = spaces.Box(-5.0, 5.0, shape=(27 + 12 + 12 + 2,), dtype=np.float32)
-        self.action_space = spaces.Box(-1.0, 1.0, shape=(3,), dtype=np.float32)
+        self.action_space = spaces.Box(-1.0, 1.0, shape=(2 if self.pedal_axis else 3,), dtype=np.float32)
 
     # ------------------------------------------------------------------ helpers
     def t_ref(self, p):
@@ -90,9 +97,24 @@ class Style12Env(gym.Env):
         frac = np.clip((self.prog_unw - self.start_m) / self.L, 0.0, 1.0)
         return np.clip(np.concatenate([np.asarray(x, np.float32), self.target_z, run_z.astype(np.float32), [frac, self.D_prev / 2.0]]), -5.0, 5.0).astype(np.float32)
 
+    def base_action(self):
+        """The action that reproduces the pure-pursuit base driver in this environment's action space (residual: no correction)."""
+        bs, bt, bb = self._base[:3]
+        if self.residual:
+            return np.zeros(2, np.float32)
+        return np.array([bs, bt - bb] if self.pedal_axis else [bs, bt, bb], np.float32)
+
     def _apply(self, a):
         a = np.clip(np.asarray(a, float), -1.0, 1.0)
-        steer, thr, brk = float(a[0]), float(np.clip(a[1], 0, 1)), float(np.clip(a[2], 0, 1))
+        if self.pedal_axis:
+            if self.residual:
+                bs, bt, bb = self._base[:3]
+                steer, u = float(np.clip(bs + self.res_steer * a[0], -1.0, 1.0)), float(np.clip(bt - bb + self.res_pedal * a[1], -1.0, 1.0))
+            else:
+                steer, u = float(a[0]), float(a[1])
+            thr, brk = max(u, 0.0), max(-u, 0.0)
+        else:
+            steer, thr, brk = float(a[0]), float(np.clip(a[1], 0, 1)), float(np.clip(a[2], 0, 1))
         if brk <= 0.05:
             brk = 0.0          # the simulator cuts the throttle for ANY brake value above 0: a pedal at 0.01 must not do that (and 0.05 is where the style numbers count the brake as on)
         else:

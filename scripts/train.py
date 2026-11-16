@@ -79,9 +79,12 @@ class BCSAC(SAC):
             self.critic.optimizer.step()
             min_q_pi = torch.cat(self.critic(data.observations, actions_pi), dim=1).min(dim=1, keepdim=True)[0]
             rl_loss = (ent_coef * log_prob - min_q_pi).mean()
-            mean_actions, _, _ = self.actor.get_action_dist_params(data.observations)
-            bc_loss = F.mse_loss(torch.tanh(mean_actions), data.observations[:, BASE_CMD])     # pull the MEAN action (not the sampled one: that would shrink the spread)
-            actor_loss = rl_loss / (min_q_pi.abs().mean().detach() + 1e-6) + w_bc * bc_loss if w_bc > 0 else rl_loss
+            if w_bc > 0:
+                mean_actions, _, _ = self.actor.get_action_dist_params(data.observations)
+                bc_loss = F.mse_loss(torch.tanh(mean_actions), data.observations[:, BASE_CMD])     # pull the MEAN action (not the sampled one: that would shrink the spread)
+                actor_loss = rl_loss / (min_q_pi.abs().mean().detach() + 1e-6) + w_bc * bc_loss
+            else:                                    # no pull (also the only possible case for a 2-number action: the base command has 3 numbers)
+                bc_loss, actor_loss = torch.zeros(()), rl_loss
             actor_losses.append(actor_loss.item())
             bc_losses.append(bc_loss.item())
             self.actor.optimizer.zero_grad()
