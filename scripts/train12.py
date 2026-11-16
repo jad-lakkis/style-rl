@@ -244,6 +244,10 @@ def main():
     ap.add_argument("--residual", action="store_true", help="the pure-pursuit driver steers and sets the pedals, the agent adds a bounded correction (implies --pedal-axis; needs --no-warm-start --bc-weight 0)")
     ap.add_argument("--res-steer", type=float, default=0.1, help="largest steering correction of the agent (steering is -1..1)")
     ap.add_argument("--res-pedal", type=float, default=0.2, help="largest correction of the agent on the pedal axis (-1..1)")
+    ap.add_argument("--steer-auth", type=float, default=0.0, help="steering action 1.0 = the wheel angle for this many m/s^2 of lateral acceleration at the current speed (never above full lock); 0 = off (1.0 = full lock). Try 45")
+    ap.add_argument("--speed-w", type=float, default=0.0, help="weight of -min(|speed - the line's speed here| / 10, 3) per step: follow the line's speed profile (stops crawling)")
+    ap.add_argument("--style-w", type=float, default=1.0, help="0 = no style payments (stage 1 of the curriculum: line and speed only), 1 = as before")
+    ap.add_argument("--w-time", type=float, default=1.0, help="weight of the lap-time term (0 in stage 1 of the curriculum)")
     args = ap.parse_args()
     if (args.residual or args.pedal_axis) and not args.no_warm_start:
         ap.error("--residual / --pedal-axis have two action numbers; the warm start copies a three-number base command: use --no-warm-start --bc-weight 0")
@@ -257,7 +261,8 @@ def main():
     state = json.loads(state_f.read_text()) if state_f.is_file() else {}
     env_kw = dict(driver=args.driver, backend=args.backend, d_max=args.d_max, lam0=state.get("lam", args.lam0), lam_eta=args.lam_eta, lam_max=args.lam_max, rand_start=args.rand_start, hide_base=args.hide_base_command,
                   line_w=args.line_w, line_delta=args.line_delta, line_decay=args.line_decay, line_floor=args.line_floor, prog_w=args.prog_w, style_dense=args.style_dense, style_clip=args.style_clip,
-                  start_speed_lo=args.start_speed_lo, residual=args.residual, res_steer=args.res_steer, res_pedal=args.res_pedal, pedal_axis=args.pedal_axis)
+                  start_speed_lo=args.start_speed_lo, residual=args.residual, res_steer=args.res_steer, res_pedal=args.res_pedal, pedal_axis=args.pedal_axis,
+                  steer_auth=args.steer_auth, speed_w=args.speed_w, style_w=args.style_w, weights=({"time": args.w_time} if args.w_time != 1.0 else None))
     env = Monitor(Style12Env(seed=args.seed, **env_kw))
     eval_env = Style12Env(seed=args.seed + 7, **{**env_kw, "rand_start": 0.0})
     lib = Library(args.out, state.get("library_n", 0))
@@ -299,7 +304,7 @@ def main():
     if not (args.out / "baselines.json").is_file():
         base = {}
         for name, follow in (("pure_pursuit_driver", "driver"), ("neutral", "neutral")):
-            e = Style12Env(**{**env_kw, "follow": follow, "rand_start": 0.0})
+            e = Style12Env(**{**env_kw, "follow": follow, "rand_start": 0.0, "steer_auth": 0.0})      # the comparison laps are the base driver itself: its steering is not scaled
             res, df, numbers = run_lap12(e, None)
             df.to_csv(args.out / f"baseline_{name}.csv", index=False)
             base[name] = {**res, "numbers": dict(zip(KEYS, map(float, numbers)))}

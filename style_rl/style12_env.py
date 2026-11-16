@@ -42,8 +42,12 @@ class Style12Env(gym.Env):
 
     def __init__(self, driver="attacker", backend="mock", follow="neutral", weights=None, d_max=0.3, lam0=3.0, lam_eta=0.3, lam_max=30.0, check_every=25, rand_start=0.5, seed=0, targets=None, hide_base=False,
                  line_w=0.0, line_delta=1.0, line_cap=6.0, line_decay=0, line_floor=0.4, prog_w=0.0, style_dense=0.0, style_clip=4.0, start_speed_lo=0.85,
-                 residual=False, res_steer=0.1, res_pedal=0.2, pedal_axis=False):
+                 residual=False, res_steer=0.1, res_pedal=0.2, pedal_axis=False, steer_auth=0.0, speed_w=0.0, style_w=1.0):
         super().__init__()
+        self.steer_auth = steer_auth    # >0: the steering action is scaled by the speed: action 1.0 = the wheel angle that gives about steer_auth m/s^2 of lateral acceleration (kinematic), never more than full lock.
+        #                                 At 60 m/s full lock is ~20 g, the useful range is a few percent of the action range; this gives the agent (and its exploration noise) a usable scale. 0 = off (action 1.0 = full lock)
+        self.speed_w = speed_w          # >0: -speed_w x min(|v - speed of the track's line here| / 10 m/s, 3) every step (follow the line's speed profile; stops the agent from learning to crawl)
+        self.style_w = style_w          # 0 = no style payments at all (the first stage of a line-following curriculum); 1 = as before
         self.residual = residual                    # True: the pure-pursuit driver steers and sets the pedals, the agent adds a bounded correction (+-res_steer on the steering, +-res_pedal on the pedal axis)
         self.res_steer, self.res_pedal = res_steer, res_pedal
         self.pedal_axis = bool(pedal_axis or residual)   # ONE pedal axis instead of throttle + brake: above 0 throttle, below 0 brake. (Two pedals clipped at 0 have a dead half where nothing happens and no gradient.)
@@ -51,7 +55,7 @@ class Style12Env(gym.Env):
         self.line_w, self.line_delta, self.line_cap, self.line_decay, self.line_floor = line_w, line_delta, line_cap, int(line_decay), line_floor
         self.prog_w, self.style_dense, self.style_clip, self.start_speed_lo = prog_w, style_dense, style_clip, start_speed_lo
         self.total_steps = 0            # steps taken by this environment so far (the line penalty fades with it); the training script sets it when a run is resumed
-        self.comp_names = ("time", "style", "off", "jerk", "stall") + (("line",) if line_w > 0 else ()) + (("prog",) if prog_w > 0 else ()) + (("sdense",) if style_dense > 0 else ())
+        self.comp_names = ("time", "style", "off", "jerk", "stall") + (("line",) if line_w > 0 else ()) + (("prog",) if prog_w > 0 else ()) + (("sdense",) if style_dense > 0 else ()) + (("speed",) if speed_w > 0 else ())
         self.driver_name = driver
         self.tg = targets or StyleTargets()
         self.target = self.tg.drivers[driver]
@@ -97,6 +101,13 @@ class Style12Env(gym.Env):
         frac = np.clip((self.prog_unw - self.start_m) / self.L, 0.0, 1.0)
         return np.clip(np.concatenate([np.asarray(x, np.float32), self.target_z, run_z.astype(np.float32), [frac, self.D_prev / 2.0]]), -5.0, 5.0).astype(np.float32)
 
+    def _authority(self):
+        """Share of full lock that steering action 1.0 stands for at the current speed (1.0 when steer_auth is off)."""
+        if self.steer_auth <= 0:
+            return 1.0
+        v = max(float(self.o["speed"]), 5.0)
+        return float(min(1.0, self.steer_auth * 2.8 / (v * v * self.env.max_steering_rad)))     # 2.8 m = wheelbase
+
     def base_action(self):
         """The action that reproduces the pure-pursuit base driver in this environment's action space (residual: no correction)."""
         bs, bt, bb = self._base[:3]
@@ -111,10 +122,10 @@ class Style12Env(gym.Env):
                 bs, bt, bb = self._base[:3]
                 steer, u = float(np.clip(bs + self.res_steer * a[0], -1.0, 1.0)), float(np.clip(bt - bb + self.res_pedal * a[1], -1.0, 1.0))
             else:
-                steer, u = float(a[0]), float(a[1])
+                steer, u = float(a[0]) * self._authority(), float(a[1])
             thr, brk = max(u, 0.0), max(-u, 0.0)
         else:
-            steer, thr, brk = float(a[0]), float(np.clip(a[1], 0, 1)), float(np.clip(a[2], 0, 1))
+            steer, thr, brk = float(a[0]) * self._authority(), float(np.clip(a[1], 0, 1)), float(np.clip(a[2], 0, 1))
         if brk <= 0.05:
             brk = 0.0          # the simulator cuts the throttle for ANY brake value above 0: a pedal at 0.01 must not do that (and 0.05 is where the style numbers count the brake as on)
         else:
@@ -181,8 +192,10 @@ class Style12Env(gym.Env):
             c["line"] = -self.line_w * fade * (e * e / (2.0 * self.line_delta) if e < self.line_delta else e - 0.5 * self.line_delta)
         if self.prog_w > 0:
             c["prog"] = self.prog_w * dd
+        if self.speed_w > 0:
+            c["speed"] = -self.speed_w * min(abs(float(o["speed"]) - float(self.neutral.at(self.neutral.v, o["progress_m"]))) / 10.0, 3.0)
         if self.style_dense > 0:
-            c["sdense"] = -self.style_dense * self.lam * self.D_dense * dd / self.L
+            c["sdense"] = -self.style_w * self.style_dense * self.lam * self.D_dense * dd / self.L
         terminated, truncated, info = False, False, {}
         if not o["inside_track"]:
             c["off"] -= w["off"]
@@ -201,7 +214,7 @@ class Style12Env(gym.Env):
         if not terminated and (self.steps % self.check_every == 0 or done_lap):
             self.est, self.meas = self.style.estimate(min(covered, self.L) if done_lap else covered)
             D = self.tg.distance(self.est, self.target)
-            c["style"] = -self.lam * (D - self.D_prev)
+            c["style"] = -self.style_w * self.lam * (D - self.D_prev)
             self.D_prev = D
             self.D_dense = self.tg.distance(self.meas, self.target, self.style_clip)
         if done_lap and not terminated:
