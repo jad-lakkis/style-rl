@@ -55,13 +55,13 @@ All laps are the same car on the same track in the simulator, started on the lin
 </main>
 <script>
 const DATA = __DATA__, T = DATA.track;
-const COL = {driver:"#555555", small:"#CC79A7", keep:"#0072B2", fast:"#D55E00"};
-const NAME = {driver:"driver's run", small:"RL lap, small gain", keep:"RL lap, style kept", fast:"RL fastest lap"};
-const SHORT = {driver:"driver's run", small:"small gain", keep:"style kept", fast:"fastest"};
-const ORDER = ["driver","small","keep","fast"];
+const COL = {driver:"#555555", keep:"#0072B2", fast:"#D55E00"};
+const NAME = {driver:"driver's run", keep:"RL lap, style kept", fast:"RL fastest lap"};
+const SHORT = {driver:"driver's run", keep:"style kept", fast:"fastest"};
+const ORDER = ["driver","keep","fast"];
 const $ = id => document.getElementById(id);
 const cv = $("map"), ctx = cv.getContext("2d"), tr = $("trace"), tctx = tr.getContext("2d"), df = $("diff"), dctx = df.getContext("2d"), gc = $("gapc"), gctx = gc.getContext("2d");
-let D, sec = null, on = {driver:true, small:true, keep:true, fast:true}, t = 0, playing = false, last = null;
+let D, sec = null, on = {driver:true, keep:true, fast:true}, t = 0, playing = false, last = null;
 const V = {cx:0, cy:0, ext:1000, zoom:1};                   // 2D view
 const CAM = {phi:0, back:13, height:4.0};                    // chase camera: orbit angle, distance behind, height
 Object.keys(DATA.drivers).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = k; $("drv").appendChild(o); });
@@ -139,7 +139,7 @@ function drawChase(st){ const W = cv.width, H = cv.height; setCam(st);
     ctx.beginPath(); ctx.arc(top[0], top[1], 5, 0, 6.2832); ctx.fillStyle = COL[c.k]; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
     ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; const ly = top[1] - 9 - ORDER.indexOf(c.k) * 13; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.92)"; ctx.strokeText(SHORT[c.k], top[0], ly); ctx.fillStyle = "#111"; ctx.fillText(SHORT[c.k], top[0], ly); }
   // heads-up display: speed, brake, throttle and the line against the driver's run, for each lap
-  const hx = 8, hy = H - 8 - 5 * 18 - 8, dlap = D.laps.driver; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.fillRect(hx, hy, 470, 5 * 18 + 8);
+  const hx = 8, hy = H - 8 - 4 * 18 - 8, dlap = D.laps.driver; ctx.textAlign = "left"; ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.fillRect(hx, hy, 470, 4 * 18 + 8);
   ctx.font = "10px sans-serif"; ctx.fillStyle = "#555"; ctx.fillText("speed", 175, hy + 13); ctx.fillText("brake", 236, hy + 13); ctx.fillText("throttle", 300, hy + 13); ctx.fillText("line vs driver (+ left)", 362, hy + 13);
   ORDER.forEach((k, r) => { const y = hy + 13 + (r + 1) * 18 - 2, s = st[k]; ctx.fillStyle = COL[k]; ctx.beginPath(); ctx.arc(20, y - 4, 5, 0, 6.2832); ctx.fill();
     ctx.fillStyle = on[k] ? "#111" : "#999"; ctx.font = (k === camK() ? "bold " : "") + "11.5px sans-serif"; ctx.fillText(SHORT[k] + (k === camK() ? "  (camera)" : ""), 31, y); ctx.font = "11.5px sans-serif";
@@ -193,9 +193,9 @@ function build(){ D = DATA.drivers[$("drv").value];
   $("tab").innerHTML = "<tr><th>lap</th><th>lap time</th><th>speed</th><th>gap</th><th id='hd_a'>ahead</th></tr>" + ORDER.map(k => `<tr><td><input type="checkbox" data-k="${k}" ${on[k] ? "checked" : ""}><span class="sw" style="background:${COL[k]}"></span>${NAME[k]}</td><td>${D.laps[k].lap_time.toFixed(2)} s</td><td id="v_${k}"></td><td id="g_${k}"></td><td id="a_${k}"></td></tr>`).join("");
   $("tab").querySelectorAll("input").forEach(c => c.onchange = () => { on[c.dataset.k] = c.checked; draw(); });
   const rows = [{name:"whole lap", a:0, b:D.L, kind:"all"}].concat(D.sectors);
-  $("sectab").innerHTML = "<tr><th>sector</th><th>m</th><th>driver</th>" + ["small","keep","fast"].map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
+  $("sectab").innerHTML = "<tr><th>sector</th><th>m</th><th>driver</th>" + ["keep","fast"].map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
     rows.map((s, i) => { const tt = {}; for (const k of ORDER) tt[k] = s.kind === "all" ? D.laps[k].lap_time : secTime(k, s);
-      return `<tr class="row" data-i="${i - 1}"><td>${s.name}</td><td>${Math.round(s.a)}-${Math.round(s.b)}</td><td>${tt.driver.toFixed(2)}</td>` + ["small","keep","fast"].map(k => { const d = tt[k] - tt.driver; return `<td class="${d < 0 ? "neg" : "pos"}">${d >= 0 ? "+" : ""}${d.toFixed(2)}</td>`; }).join("") + "</tr>"; }).join("");
+      return `<tr class="row" data-i="${i - 1}"><td>${s.name}</td><td>${Math.round(s.a)}-${Math.round(s.b)}</td><td>${tt.driver.toFixed(2)}</td>` + ["keep","fast"].map(k => { const d = tt[k] - tt.driver; return `<td class="${d < 0 ? "neg" : "pos"}">${d >= 0 ? "+" : ""}${d.toFixed(2)}</td>`; }).join("") + "</tr>"; }).join("");
   $("sectab").querySelectorAll("tr.row").forEach(r => r.onclick = () => { $("sec").value = r.dataset.i; setSector(); });
   $("sec").innerHTML = "<option value='-1'>whole lap</option>" + D.sectors.map((s, i) => `<option value='${i}'>${s.name}  (${Math.round(s.a)}-${Math.round(s.b)} m)</option>`).join("");
   const S_ = D.style; $("sty").innerHTML = "<tr><th>style number [unit]</th>" + ORDER.map(k => `<th style="color:${COL[k]}">${SHORT[k]}</th>`).join("") + "</tr>" +
