@@ -6,3 +6,4 @@ runs/
 .venv*/
 external/
 *.log
+data/demos*/
