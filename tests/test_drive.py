@@ -139,3 +139,15 @@ def test_prefill_closes_every_column(course):
     assert rb.dones[T - 1].astype(bool).all()                      # the last row of every column is closed ...
     assert rb.timeouts[T - 1].astype(bool).all()                   # ... as a time-limit cut (these 8 s episodes end by the time limit, not by a failure)
     assert np.isfinite(rb.rewards[:T]).all()
+
+
+def test_both_pedals_act_as_commanded(course):
+    """No brake priority: throttle and brake together give a net effect between throttle alone and brake alone."""
+    def speed_after(thr_a, brk_a):
+        env = make_env(course)
+        env.reset(seed=2, options={"start_s": 1500.0, "start_speed": 30.0})
+        for _ in range(25):
+            env.step(np.array([0.0, thr_a, brk_a], np.float32))
+        return env.state["speed"]
+    throttle_only, both, brake_only = speed_after(1.0, -1.0), speed_after(1.0, 0.0), speed_after(-1.0, 0.0)
+    assert throttle_only > both > brake_only

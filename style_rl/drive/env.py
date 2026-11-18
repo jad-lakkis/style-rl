@@ -3,7 +3,7 @@
 Episode      training: the car is placed on the reference line at a random station with a random start speed (a fraction of the QSS ceiling), the scripted driver drives
              `settle_s` seconds (not part of the episode), then control passes to the agent for at most `max_episode_s` seconds. Evaluation: the same, but 200 m before the
              start line, and the agent drives `eval_laps` timed laps; lap 2 is the flying lap that is reported.
-Action       3 numbers in [-1, 1]: steering (+-1 = +-steer_lock_rad, + = left), throttle, brake (pedal = clip((a + 0.5) / 1.5, 0, 1); a <= -0.5 releases). Brake wins over throttle.
+Action       3 numbers in [-1, 1]: steering (+-1 = +-steer_lock_rad, + = left), throttle, brake (pedal = clip((a + 0.5) / 1.5, 0, 1); a <= -0.5 releases). Both pedals act as commanded (no brake priority), as in the original environment and in Assetto Corsa.
 Observation  159 numbers, the frozen contract in config.py:
                ego (9)     speed, v_x, v_y, yaw rate, a_x, a_y (body frame, from the last decision), actual steer angle, rear slip ratios RL, RR
                line (3)    lateral offset e to the reference line, heading error to it, position across the track (-1 right edge .. +1 left edge)

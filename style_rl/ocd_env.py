@@ -480,6 +480,7 @@ class OCDMonzaEnv:
         steering,
         throttle,
         brake,
+        brake_priority=True,
     ):
 
         actions = np.asarray(
@@ -504,8 +505,8 @@ class OCDMonzaEnv:
             np.clip(brake, 0.0, 1.0)
         )
 
-        # Brake takes priority.
-        if brake > 0.0:
+        # Brake takes priority (the old style pipeline). The portable driving env passes brake_priority=False: both pedals act as commanded.
+        if brake_priority and brake > 0.0:
             throttle = 0.0
 
         obs = self.observe()

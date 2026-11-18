@@ -50,7 +50,7 @@ class MockBackend:
 
     def step(self, steer, throttle, brake):
         self._steer.step(steer)
-        return self._state(self.env.step_normalized(steer, throttle, brake))
+        return self._state(self.env.step_normalized(steer, throttle, brake, brake_priority=False))
 
 
 class OCDBackend:
@@ -91,7 +91,7 @@ class OCDBackend:
 
     def step(self, steer, throttle, brake):
         self._steer.step(steer)
-        return self._state(self.env.step_normalized(steer, throttle, brake))
+        return self._state(self.env.step_normalized(steer, throttle, brake, brake_priority=False))
 
 
 def make_backend(name, track_csv, steer_lock_rad=0.30, dt=0.04):

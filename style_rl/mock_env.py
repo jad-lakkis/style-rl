@@ -30,10 +30,10 @@ class MockOCDEnv:
     def observe(self):
         return {"time_s": self.time, "x": self.x, "y": self.y, "vx": self.v, "vy": 0.0, "speed": self.v, "yaw": self.yaw, "yaw_rate": self.yaw_rate, **self.track.query(self.x, self.y)}
 
-    def step_normalized(self, steering, throttle, brake):
+    def step_normalized(self, steering, throttle, brake, brake_priority=True):
         steering = float(np.clip(steering, -1, 1)) * self.max_steering_rad
         throttle, brake = float(np.clip(throttle, 0, 1)), float(np.clip(brake, 0, 1))
-        if brake > 0:
+        if brake_priority and brake > 0:
             throttle = 0.0
         h = 0.01
         for _ in range(int(round(self.control_dt / h))):
