@@ -236,7 +236,7 @@ def test_staged_sac_stores_the_executed_action(course):
 
 
 def _nominal_dr(**kw):
-    d = {"grip": 1.0, "brake": 1.0, "drive": 1.0, "aero": 1.0, "mass": 1.0, "steer_lag_s": None, "action_delay": False, "obs_noise": 0.0}
+    d = {"grip": 1.0, "brake": 1.0, "drive": 1.0, "aero": 1.0, "mass": 1.0, "steer_lag_s": None, "slip_scale": 1.0, "action_delay": False, "obs_noise": 0.0}
     d.update(kw)
     return d
 

@@ -31,6 +31,7 @@ def main():
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--steps", type=int, default=2_000_000)
     ap.add_argument("--max-hours", type=float, default=None)
+    ap.add_argument("--buffer-size", type=int, default=1_000_000, help="replay buffer (transitions); 1M is ~1.3 GB in memory and on disk at every save, use ~200000 on a small machine")
     ap.add_argument("--demo-transitions", type=int, default=200_000)
     ap.add_argument("--demo-workers", type=int, default=4)
     ap.add_argument("--demo-dir", default=str(ROOT / "data/demos"))
@@ -47,7 +48,7 @@ def main():
     a = ap.parse_args()
     tracks = tuple(str(ROOT / f"data/tracks/{t.strip()}_geometry.csv") for t in a.tracks.split(",") if t.strip())
     cfg = TrainConfig(out=a.out, track_csv=a.track, tracks=tracks, envelope_json=a.envelope, backend=a.backend, seed=a.seed, n_envs=a.n_envs, gradient_steps=a.gradient_steps or max(a.n_envs // 2, 1),
-                      device=a.device, total_steps=a.steps, max_hours=a.max_hours, eval_interval=a.eval_interval, eval_stochastic_laps=a.eval_stochastic, demo_dir=a.demo_dir,
+                      device=a.device, total_steps=a.steps, buffer_size=a.buffer_size, max_hours=a.max_hours, eval_interval=a.eval_interval, eval_stochastic_laps=a.eval_stochastic, demo_dir=a.demo_dir,
                       demo=DemoConfig(n_transitions=a.demo_transitions, workers=a.demo_workers), init_mode=a.init, blend_steps=a.blend_steps, blend_w0=a.blend_w0, blend_fraction=a.blend_fraction)
     if a.smoke:
         cfg = replace(cfg, total_steps=6000, demo=DemoConfig(n_transitions=4000, workers=1), bc_epochs=3, offline_blocks=2, offline_steps_per_block=200, online_warmup_steps=2000,

@@ -5,12 +5,11 @@
     state: dict with time_s, x, y, yaw, vx, vy (body frame), speed, yaw_rate, steer_actual (road-wheel angle, rad), slip_rl, slip_rr (rear slip ratios)
 
 `mock` is a kinematic stand-in with the F317 limits, for tests on a machine without OCD. NOT OCD physics: never report its results as OCD results.
-`ocd` is Open-Car-Dynamics through style_rl.ocd_env (Linux only). The steering actuator of OCD is a PT1 (T = 0.06 s) with a rate limit of 0.5 rad/s and a lock of 0.3 rad;
-the actual steer angle is tracked here with the same law until it is read from the simulator state (TODO: verify against the OCD output on the pod).
-The rear slip ratios are read from the OCD wheel speeds when the output has them (TODO: field names, verify on the pod); otherwise they are 0 and a warning is printed once.
+`ocd` is Open-Car-Dynamics through style_rl.ocd_env (Linux only; the Docker image of docker/ has it). From the OCD output (checked with scripts/ocd_inspect.py):
+  steer_actual   the mean of steering_angle_per_wheel_rad.front_left / front_right (the actuator is a PT1, T = 0.06 s, rate limit 0.5 rad/s, lock 0.3 rad)
+  slip_rl, rr    vehicle_dynamics_output.tire_longitudinal_slip_per_wheel.rear_left / rear_right: the tyre model's own slip ratio, the counterpart of Assetto Corsa's tyre slip ratio
+The mock tracks the steering with the same PT1 law and has no slip.
 """
-import warnings
-
 import numpy as np
 
 T_PT1_S, RATE_MAX_RADPS = 0.06, 0.5
@@ -70,8 +69,6 @@ class OCDBackend:
         self.env = OCDMonzaEnv(track_path=track_csv, dt=dt)
         self.env.max_steering_rad = steer_lock_rad          # steering action +-1 = +-0.3 rad (OCD's actuator lock); the old wrapper default of 0.15 rad is NOT used here
         self.control_dt = float(self.env.control_dt)
-        self.rolling_radius_m = float(self.env.params["vehicle_dynamics_double_track.tire.rolling_radius_m.rear"])
-        self._steer = _Steer(self.control_dt, steer_lock_rad)
         self._nominal = dict(self.env.params)
 
     def set_randomization(self, d):
@@ -86,35 +83,23 @@ class OCDBackend:
             p["steering_actuator.T_PT1"] = d["steer_lag_s"]
         self.env.params = p
         self.env.drive_scale, self.env.brake_scale = d["drive"], d["brake"]
-        self._steer.T = d["steer_lag_s"] or T_PT1_S
 
-    def _slip(self):
-        """Rear slip ratios (RL, RR) from the wheel speeds of the OCD output; (0, 0) if the output does not expose them."""
+    def _wheels(self):
+        """(rear-left slip ratio, rear-right slip ratio, actual road-wheel steering angle [rad]) from the OCD output."""
         out = self.env.vehicle.get_vehicle_model_output()
-        for path in ("wheel_angular_velocity_radps", "wheel_speed_radps", "wheel_rotational_speed_radps"):
-            w = getattr(getattr(out, "vehicle_dynamics_output", out), path, None)
-            if w is not None:
-                break
-        if w is None:
-            if not OCDBackend._warned:
-                warnings.warn("OCD output has no wheel speed field under the known names: rear slip ratios are set to 0 (verify on the pod)")
-                OCDBackend._warned = True
-            return 0.0, 0.0
-        v = max(float(self.env.observe()["speed"]), 1.0)
-        rl, rr = float(getattr(w, "rear_left", getattr(w, "rl", 0.0))), float(getattr(w, "rear_right", getattr(w, "rr", 0.0)))
-        return (rl * self.rolling_radius_m - v) / v, (rr * self.rolling_radius_m - v) / v
+        slip = out.vehicle_dynamics_output.tire_longitudinal_slip_per_wheel
+        ang = out.steering_angle_per_wheel_rad
+        return float(slip.rear_left), float(slip.rear_right), 0.5 * (float(ang.front_left) + float(ang.front_right))
 
     def _state(self, o):
-        sl, sr = self._slip()
+        sl, sr, steer = self._wheels()
         return {"time_s": o["time_s"], "x": o["x"], "y": o["y"], "yaw": o["yaw"], "vx": o["vx"], "vy": o["vy"], "speed": o["speed"], "yaw_rate": o["yaw_rate"],
-                "steer_actual": self._steer.angle, "slip_rl": sl, "slip_rr": sr}
+                "steer_actual": steer, "slip_rl": sl, "slip_rr": sr}
 
     def reset(self, x, y, yaw, speed):
-        self._steer.reset()
         return self._state(self.env.reset(start_idx=0, speed=speed, pose=(x, y, yaw)))
 
     def step(self, steer, throttle, brake):
-        self._steer.step(steer)
         return self._state(self.env.step_normalized(steer, throttle, brake, brake_priority=False))
 
 

@@ -99,7 +99,8 @@ class DrivingEnv(gym.Env):
             vx, vy, r = (p[0] + cur[0]) / 2, (p[1] + cur[1]) / 2, (p[2] + cur[2]) / 2
             ax, ay = (cur[0] - p[0]) / self.cfg.dt_s - r * vy, (cur[1] - p[1]) / self.cfg.dt_s + r * vx
         self._next_kin = cur
-        slip = lambda x: min(o.slip_clip, max(-o.slip_clip, o.slip_gain * x))
+        k = self.dr["slip_scale"]
+        slip = lambda x: min(o.slip_clip, max(-o.slip_clip, o.slip_gain * k * x))
         return np.array([math.hypot(st["vx"], st["vy"]) / o.speed_scale_mps, st["vx"] / o.speed_scale_mps, st["vy"] / o.vy_scale_mps, st["yaw_rate"] / o.yaw_rate_scale_radps,
                          ax / o.accel_scale_mps2, ay / o.accel_scale_mps2, st["steer_actual"] / o.steer_scale_rad, slip(st["slip_rl"]), slip(st["slip_rr"])])
 
