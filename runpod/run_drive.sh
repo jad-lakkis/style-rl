@@ -16,3 +16,4 @@ while [ $tries -lt 8 ]; do
   tries=$((tries+1)); echo "=== crashed (exit $rc), restart $tries in 30 s" >> "$OUT.log"; sleep 30
 done
 echo "=== loop ended $(date -u +%H:%M:%S) UTC" >> "$OUT.log"
+[ -z "$NO_FINISH" ] && bash "$(dirname "$0")/finish_drive.sh" "$OUT" >> "$OUT.log" 2>&1     # pack the results and stop the pod (NO_FINISH=1: do neither)

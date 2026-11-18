@@ -10,6 +10,7 @@ Resume with `resume=True`: the last checkpoint and replay buffer are loaded and 
 """
 import json
 import os
+import signal
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -252,13 +253,19 @@ class BlendCallback(BaseCallback):
 
 
 class WallClock(BaseCallback):
+    """Ends the training cleanly (the run saves everything and exits with code 0) after `hours`, or as soon as the file out/STOP exists."""
+
     def __init__(self, hours, run):
         super().__init__()
-        self.hours, self.run = hours, run
+        self.hours, self.run, self.k = hours, run, 0
 
     def _on_step(self):
+        self.k += 1
         if self.hours is not None and self.run.hours() >= self.hours:
             self.run.event("wall_clock_limit", hours=self.hours)
+            return False
+        if self.k % 50 == 0 and (self.run.out / "STOP").exists():
+            self.run.event("stop_file")
             return False
         return True
 
@@ -270,6 +277,8 @@ def run(cfg, resume=False, log=print):
     th.set_num_threads(cfg.torch_threads)
     (out / "config.json").write_text(json.dumps(asdict(cfg), indent=1, default=str))
     r = Run(out)
+    (out / "STOP").unlink(missing_ok=True)                       # a stop file of an earlier session must not stop this one
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))     # a terminate signal ends the run through the `finally` below, which saves the model and the buffer
     tracks = list(cfg.tracks) or [cfg.track_csv]
     env_args = (tracks, cfg.envelope_json, cfg.backend, cfg.env)
     vec = build_vec_env(cfg.n_envs, tracks, cfg.envelope_json, cfg.backend, cfg.env, subprocess=cfg.n_envs > 1)
