@@ -68,6 +68,13 @@ class StagedSAC(SAC):
         finally:
             self.ent_coef_optimizer = opt
 
+    def _store_transition(self, replay_buffer, buffer_action, new_obs, reward, dones, infos):
+        """Store the action that was EXECUTED (the blend of the agent's and the scripted driver's action while the teacher assists), not the agent's own: the critic then learns the
+        value of the pure system, whoever produced the action."""
+        if infos and all("executed_action" in i for i in infos):
+            buffer_action = np.stack([np.asarray(i["executed_action"], np.float32) for i in infos])
+        super()._store_transition(replay_buffer, buffer_action, new_obs, reward, dones, infos)
+
     @property
     def alpha(self):
         return float(th.exp(self.log_ent_coef.detach()).item()) if self.log_ent_coef is not None else float(self.ent_coef_tensor.item())

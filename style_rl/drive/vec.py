@@ -16,14 +16,20 @@ def make_env(rank, track_csv, envelope_json, backend, cfg):
     return DrivingEnv(course, make_backend(backend, track_csv, cfg.steer_lock_rad, cfg.dt_s), cfg)
 
 
-def env_fns(n_envs, track_csv, envelope_json, backend, cfg=EnvConfig()):
-    return [partial(make_env, i, str(track_csv), str(envelope_json), backend, cfg) for i in range(n_envs)]
+def as_tracks(tracks):
+    return [str(tracks)] if isinstance(tracks, (str, bytes)) or hasattr(tracks, "__fspath__") else [str(t) for t in tracks]
 
 
-def build_vec_env(n_envs, track_csv, envelope_json, backend, cfg=EnvConfig(), *, start_method=DEFAULT_START_METHOD, subprocess=True):
+def env_fns(n_envs, tracks, envelope_json, backend, cfg=EnvConfig()):
+    """One environment per rank; with several tracks the rank-i environment drives track i % n_tracks (so one policy learns them all at once)."""
+    ts = as_tracks(tracks)
+    return [partial(make_env, i, ts[i % len(ts)], str(envelope_json), backend, cfg) for i in range(n_envs)]
+
+
+def build_vec_env(n_envs, tracks, envelope_json, backend, cfg=EnvConfig(), *, start_method=DEFAULT_START_METHOD, subprocess=True):
     """VecMonitor(SubprocVecEnv) of n_envs environments (DummyVecEnv if not `subprocess`). Call from inside `if __name__ == '__main__':`."""
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecMonitor
-    fns = env_fns(n_envs, track_csv, envelope_json, backend, cfg)
+    fns = env_fns(n_envs, tracks, envelope_json, backend, cfg)
     return VecMonitor(SubprocVecEnv(fns, start_method=start_method) if subprocess else DummyVecEnv(fns))
 
 

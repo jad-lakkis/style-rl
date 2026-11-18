@@ -9,17 +9,22 @@ Observation  159 numbers, the frozen contract in config.py:
                line (3)    lateral offset e to the reference line, heading error to it, position across the track (-1 right edge .. +1 left edge)
                preview     20 stations at d_k = 300 (k/20)^1.5 m ahead: reference line, left edge, right edge in the car frame (x forward, y left), divided by max(d_k, 10)
                last action (3), and the (ego, action) of the two decisions before
+Blend        set_blend(w, fraction): in training the executed action is (1 - w) * the agent's action + w * the scripted driver's action (the driver aims at `fraction` of the QSS
+             ceiling). w is annealed from ~1 to 0 for the 'pure pursuit at the start, pure RL at the end' variant; w = 0 is the pure agent. Evaluation always runs the agent alone.
+             info['executed_action'] is the action that was executed; the replay buffer must store it (StagedSAC does).
 Reward       time_pbrs (config.RewardConfig): progress - time - terminal penalty + potential shaping -|e|. Terminal failures: a wheel off the track, wrong way, non-finite state.
              A stall (speed < 3 m/s for 2 s) is a truncation. The time limit is a truncation.
 """
 import math
 from collections import deque
+from dataclasses import replace
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
 from .config import EnvConfig, OBS_DIM
+from . import randomize
 from .demo import DemoDriver
 
 EGO = 9
@@ -47,11 +52,24 @@ class DrivingEnv(gym.Env):
         self.observation_space = spaces.Box(-o.clip, o.clip, (n,), np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (3,), np.float32)
         self.demo = DemoDriver(course, cfg)
+        self.teacher_w, self.teacher_f = 0.0, 0.85
+        ns = randomize.NOISE_STD                       # observation noise in the units of the scaled inputs (used only when a randomised episode asks for it)
+        self._noise_ego = np.array([ns["speed"] / o.speed_scale_mps, ns["v_x"] / o.speed_scale_mps, ns["v_y"] / o.vy_scale_mps, ns["yaw_rate"] / o.yaw_rate_scale_radps,
+                                    ns["a_x"] / o.accel_scale_mps2, ns["a_y"] / o.accel_scale_mps2, ns["steer_actual"] / o.steer_scale_rad, ns["slip"] * o.slip_gain, ns["slip"] * o.slip_gain])
+        self._noise_line = np.array([ns["e"] / o.e_scale_m, ns["heading"] / o.heading_scale_rad, ns["track_position"]])
+        self._noise_preview = np.repeat(ns["preview_m"] / self.preview_scale[:, 0, 0], 6)
+        self.dr = randomize.sample(randomize.RandomizeConfig(), None)
+        self._pending = None
         self.evaluation = bool(evaluation)
         self._eval_default = self.evaluation
         self.state = None
 
     # --- controls ----------------------------------------------------------------------------------
+    def set_blend(self, teacher_weight, fraction=None):
+        self.teacher_w = float(np.clip(teacher_weight, 0.0, 1.0))
+        if fraction is not None:
+            self.teacher_f = float(fraction)
+
     def _pedal(self, a):
         return float(np.clip((a + 0.5) / 1.5, 0.0, 1.0)) if self.cfg.pedal_deadzone else float((a + 1.0) / 2.0)
 
@@ -92,12 +110,19 @@ class DrivingEnv(gym.Env):
     def _observation(self):
         st, o = self.state, self.cfg.obs
         ego = self._ego()
+        noise = self.dr["obs_noise"]
+        if noise > 0.0:
+            ego = ego + noise * self._noise_ego * self.np_random.standard_normal(EGO)
         pts = self.course.at(self.s + self.preview_d) - np.array([st["x"], st["y"]])          # (N, 3, 2): reference, left, right
         c, s = math.cos(st["yaw"]), math.sin(st["yaw"])
         local = np.stack([c * pts[..., 0] + s * pts[..., 1], -s * pts[..., 0] + c * pts[..., 1]], axis=-1)
         preview = (local / self.preview_scale).ravel()
         pos = self.course.track_position(st["x"], st["y"], self.s)
-        raw = np.concatenate([ego, [self.e / o.e_scale_m, self.heading_err / o.heading_scale_rad, pos], preview, self.last_action, *self._hist])
+        line = np.array([self.e / o.e_scale_m, self.heading_err / o.heading_scale_rad, pos])
+        if noise > 0.0:
+            line = line + noise * self._noise_line * self.np_random.standard_normal(3)
+            preview = preview + noise * self._noise_preview * self.np_random.standard_normal(preview.size)
+        raw = np.concatenate([ego, line, preview, self.last_action, *self._hist])
         self._push(ego)
         return np.clip(raw, -o.clip, o.clip).astype(np.float32)
 
@@ -142,6 +167,10 @@ class DrivingEnv(gym.Env):
         gym.Env.reset(self, seed=seed)
         options = dict(options or {})
         self.evaluation = bool(options.get("evaluation", self._eval_default))
+        rnd = self.cfg.randomize
+        on = rnd.enabled and (not self.evaluation or self.cfg.randomize_eval)
+        self.dr = randomize.sample(rnd if on else replace(rnd, enabled=False), self.np_random)
+        self.backend.set_randomization(self.dr)
         for attempt in range(1, self.cfg.max_start_attempts + 1):
             s0, f, v0 = self._sample_start(options)
             if self._start_and_settle(s0, v0):
@@ -153,6 +182,7 @@ class DrivingEnv(gym.Env):
         # hand-over: the episode counters start here
         self.t0 = self.state["time_s"]
         self.t, self._dist, self._stall_s, self.done = 0.0, 0.0, 0.0, False
+        self._pending = self.last_action.copy()
         self._phi = -self.cfg.reward.shaping_k * abs(self.e)
         self.max_time_s = self.cfg.eval_max_s if self.evaluation else self.cfg.max_episode_s
         L = self.course.L
@@ -163,7 +193,7 @@ class DrivingEnv(gym.Env):
         else:
             self._lines, self._crossings = [], []
         obs = self._observation()
-        info = {"start": {"station_m": s0, "fraction": f, "speed_mps": v0, "attempts": attempt}, "e_ref": self.e, "speed": self.state["speed"], "evaluation": self.evaluation}
+        info = {"start": {"station_m": s0, "fraction": f, "speed_mps": v0, "attempts": attempt}, "randomization": dict(self.dr), "e_ref": self.e, "speed": self.state["speed"], "evaluation": self.evaluation}
         return obs, info
 
     # --- step ---------------------------------------------------------------------------------------------------
@@ -174,8 +204,15 @@ class DrivingEnv(gym.Env):
         action = np.clip(np.asarray(action, dtype=np.float32), -1.0, 1.0)
         if action.shape != (3,) or not np.all(np.isfinite(action)):
             raise ValueError("action must be 3 finite numbers")
+        executed = action
+        if self.teacher_w > 0.0 and not self.evaluation:
+            a_t = self.demo.act(self.state, self.s, self.demo.lap_target(self.s, self.teacher_f, self.state["speed"]))
+            executed = ((1.0 - self.teacher_w) * action + self.teacher_w * a_t).astype(np.float32)
         prev_s, d0, t0 = self.s, self._dist, self.t
-        st = self.backend.step(*self._controls(action))
+        applied = executed
+        if self.dr["action_delay"]:                       # the action reaches the car one decision late
+            applied, self._pending = self._pending, executed
+        st = self.backend.step(*self._controls(applied))
         self.state = st
         dt = float(cfg.dt_s)
         terminated = truncated = False
@@ -196,7 +233,7 @@ class DrivingEnv(gym.Env):
                     truncated, trunc_cause = True, "stall"
                 elif abs(self.heading_err) > cfg.wrong_way_rad:
                     cause = "wrong_way"
-        self.last_action = action
+        self.last_action = executed
         if self.evaluation and cause != "nonfinite":
             j = len(self._crossings)
             if j < len(self._lines) and d0 < self._lines[j] <= self._dist:
@@ -218,7 +255,7 @@ class DrivingEnv(gym.Env):
         obs = np.zeros(OBS_DIM, np.float32) if cause == "nonfinite" else self._observation()
         info = {"progress_m": self._dist, "time_s": self.t, "termination": cause if terminated else None, "truncation": trunc_cause,
                 "e_ref": self.e if cause != "nonfinite" else math.nan, "heading_error": self.heading_err if cause != "nonfinite" else math.nan, "speed": st["speed"],
-                "station_m": self.s}
+                "station_m": self.s, "executed_action": executed}
         if self.evaluation:
             c = self._crossings
             info["lap_times_s"] = [c[i + 1] - c[i] for i in range(len(c) - 1)]

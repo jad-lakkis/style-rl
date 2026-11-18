@@ -182,6 +182,8 @@ class OCDMonzaEnv:
         self.max_steering_rad = 0.15
 
         self.time = 0.0
+        self.drive_scale = 1.0          # domain randomisation (style_rl.drive): scale of the drive and brake torques
+        self.brake_scale = 1.0
 
         self.drivetrain = None
         self.steering = None
@@ -519,7 +521,7 @@ class OCDMonzaEnv:
         # ==========================================
 
         # Reuse the existing DallaraControls class.
-        drive_torque = float(
+        drive_torque = self.drive_scale * float(
             self.controls.throttle_to_torque(
                 speed_mps,
                 throttle,
@@ -539,7 +541,7 @@ class OCDMonzaEnv:
         )
 
         brake_torque = (
-            brake * reference_brake_torque
+            brake * reference_brake_torque * self.brake_scale
         )
 
         # ==========================================

@@ -185,3 +185,137 @@ def test_portable_actor_matches_sb3_and_the_network_contract(course, tmp_path):
         sys.path.insert(0, repo)
         from rlsetup.assetto.actor import _validate_weights
         _validate_weights({k: th.from_numpy(np.load(bundle / "actor.npz")[k].copy()) for k in KEYS})
+
+
+def test_blend_executes_the_mixture_and_evaluation_ignores_it(course):
+    def twin():
+        e = make_env(course)
+        e.reset(seed=11)
+        return e
+
+    policy = np.array([0.4, -0.2, 0.6], np.float32)
+    ref = twin()
+    teacher = ref.demo.act(ref.state, ref.s, ref.demo.lap_target(ref.s, 0.8, ref.state["speed"]))
+    for w, expected in ((0.0, policy), (1.0, teacher), (0.25, 0.75 * policy + 0.25 * teacher)):
+        e = twin()
+        e.set_blend(w, 0.8)
+        *_, info = e.step(policy)
+        assert np.allclose(info["executed_action"], expected, atol=1e-6), w
+        assert np.allclose(e.last_action, expected, atol=1e-6)
+    ev = make_env(course, evaluation=True)
+    ev.set_blend(1.0, 0.8)
+    ev.reset(seed=0)
+    *_, info = ev.step(policy)
+    assert np.allclose(info["executed_action"], policy)
+
+
+def test_staged_sac_stores_the_executed_action(course):
+    import gymnasium as gym
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    from style_rl.drive import agent as ag
+
+    class Rec(gym.Wrapper):
+        def __init__(self, env):
+            super().__init__(env)
+            self.executed = []
+
+        def step(self, a):
+            out = self.env.step(a)
+            self.executed.append(np.array(out[4]["executed_action"]))
+            return out
+
+    rec = Rec(make_env(course))
+    venv = DummyVecEnv([lambda: rec])
+    venv.env_method("set_blend", 1.0, 0.8)
+    model = ag.build_model(venv, hidden=(16, 16, 16), batch_size=32, buffer_size=2000, n_steps=3, gradient_steps=1)
+    model.learn(total_timesteps=60)
+    n = model.replay_buffer.pos
+    stored = model.replay_buffer.actions[:n, 0, :]
+    assert n == 60 and np.allclose(stored, np.stack(rec.executed[:n]), atol=1e-6)
+    assert np.abs(stored[:, 0]).max() > 0.0            # the teacher steers; the untrained agent's own steering is ~0
+
+
+def _nominal_dr(**kw):
+    d = {"grip": 1.0, "brake": 1.0, "drive": 1.0, "aero": 1.0, "mass": 1.0, "steer_lag_s": None, "action_delay": False, "obs_noise": 0.0}
+    d.update(kw)
+    return d
+
+
+def test_randomization_is_reproducible_and_skips_evaluation(course):
+    from style_rl.drive.randomize import RandomizeConfig
+    cfg = replace(EnvConfig(), randomize=RandomizeConfig(enabled=True))
+    infos = []
+    for seed in (5, 5, 6):
+        _, info = make_env(course, cfg).reset(seed=seed)
+        infos.append(info["randomization"])
+    assert infos[0] == infos[1] and infos[0] != infos[2]
+    assert 0.85 <= infos[0]["grip"] <= 1.15 and 0.04 <= infos[0]["steer_lag_s"] <= 0.10
+    _, ev = make_env(course, cfg, evaluation=True).reset(seed=5)
+    assert ev["randomization"] == _nominal_dr()
+
+
+def test_backend_randomization_changes_the_car(course):
+    b = make_backend("mock", TRACK, 0.3, 0.04)
+    x, y = course.ref_point(1500.0)
+    yaw = float(course.ref_heading_at(1500.0))
+
+    def speed_after(steer_thr_brk, **kw):
+        b.set_randomization(_nominal_dr(**kw))
+        b.reset(float(x), float(y), yaw, 40.0)
+        for _ in range(25):
+            st = b.step(*steer_thr_brk)
+        return st["speed"]
+    assert speed_after((0, 0, 1), brake=0.5) > speed_after((0, 0, 1)) > speed_after((0, 0, 1), brake=1.5)       # weaker brakes stop later
+    assert speed_after((0, 1, 0), drive=1.1) > speed_after((0, 1, 0)) > speed_after((0, 1, 0), drive=0.9)
+    assert speed_after((0, 1, 0), mass=1.03) < speed_after((0, 1, 0))
+
+
+def test_observation_noise_only_noise_and_deterministic(course):
+    from style_rl.drive.randomize import RandomizeConfig
+    base = dict(enabled=True, grip=(1, 1), brake=(1, 1), drive=(1, 1), aero=(1, 1), mass=(1, 1), steer_lag_s=(0.06, 0.06), action_delay_prob=0.0)
+    quiet, loud = RandomizeConfig(obs_noise=0.0, **base), RandomizeConfig(obs_noise=1.0, **base)         # same draws, so the same start: only the noise differs
+    o_quiet, _ = make_env(course, replace(EnvConfig(), randomize=quiet)).reset(seed=7)
+    o_a, _ = make_env(course, replace(EnvConfig(), randomize=loud)).reset(seed=7)
+    o_b, _ = make_env(course, replace(EnvConfig(), randomize=loud)).reset(seed=7)
+    assert np.array_equal(o_a, o_b)                                # seeded, reproducible
+    diff = np.abs(o_a - o_quiet).max()
+    assert 0.0 < diff < 0.2                                        # small, in scaled units
+
+
+def test_action_delay_applies_the_previous_action(course):
+    from style_rl.drive.randomize import RandomizeConfig
+    delay = RandomizeConfig(enabled=True, grip=(1, 1), brake=(1, 1), drive=(1, 1), aero=(1, 1), mass=(1, 1), steer_lag_s=(0.06, 0.06), action_delay_prob=1.0, obs_noise=0.0)
+    env = make_env(course, replace(EnvConfig(), randomize=delay))
+    env.reset(seed=3)
+    applied = []
+    orig = env.backend.step
+    env.backend.step = lambda s, t, b: (applied.append((s, t, b)), orig(s, t, b))[1]
+    a1, a2 = np.array([0.3, 0.5, -1.0], np.float32), np.array([-0.3, -1.0, 0.5], np.float32)
+    env.step(a1)
+    env.step(a2)
+    assert applied[0] != env._controls(a1)                       # the first action has not arrived yet
+    assert applied[1] == env._controls(a1)                       # the second step applies the first action
+    assert np.allclose(env.last_action, a2)                      # the observation shows the action that was chosen
+
+
+def test_four_tracks_the_scripted_driver_stays_on_every_one(course):
+    names = ("monza", "barcelona", "red_bull_ring", "silverstone")
+    for name in names:
+        csv = ROOT / f"data/tracks/{name}_geometry.csv"
+        c = Course(csv, ENVELOPE, margin_m=EnvConfig().margin_m)
+        env = DrivingEnv(c, make_backend("mock", csv, 0.3, 0.04), EnvConfig())
+        for seed in range(3):
+            env.reset(seed=seed)
+            for _, _, term, trunc, info in drive(env, 1000, fraction=0.7):
+                pass
+            assert not term, (name, seed, info["termination"], info["progress_m"])
+
+
+def test_multi_track_vector_env_and_demos(course):
+    from style_rl.drive.demos import DemoConfig, collect_episodes
+    from style_rl.drive.vec import build_vec_env
+    tracks = [str(ROOT / "data/tracks/monza_geometry.csv"), str(ROOT / "data/tracks/barcelona_geometry.csv")]
+    venv = build_vec_env(4, tracks, ENVELOPE, "mock", EnvConfig(), subprocess=False)
+    assert [c.name for c in venv.get_attr("course")] == ["monza", "barcelona", "monza", "barcelona"]
+    eps = collect_episodes(DemoConfig(n_transitions=250, workers=1), (tracks, str(ENVELOPE), "mock", replace(EnvConfig(), max_episode_s=4.0)), "spawn")
+    assert len(eps) >= 2 and all(len(e["actions"]) > 0 for e in eps)

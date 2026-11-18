@@ -7,6 +7,8 @@ Our own implementation of the design in that repository (reward, start-and-settl
 import math
 from dataclasses import dataclass, field
 
+from .randomize import RandomizeConfig
+
 OBS_DIM = 159                  # 9 ego + 3 line errors + 20 x 6 preview + 3 last action + 2 x (9 ego + 3 action) history
 
 
@@ -61,6 +63,8 @@ class EnvConfig:
     wheel_half_track_m: float = 0.8
     margin_m: float = 1.5                # the reference line stays this far inside both borders (a wheel is 0.95 m from the car centre: 1.0 m leaves no room for tracking error)
     grid_m: float = 1.0
+    randomize: RandomizeConfig = field(default_factory=RandomizeConfig)    # domain randomisation (see randomize.py); off by default
+    randomize_eval: bool = False         # randomise evaluation episodes too (off: lap times stay comparable)
     reward: RewardConfig = field(default_factory=RewardConfig)
     obs: ObsConfig = field(default_factory=ObsConfig)
 

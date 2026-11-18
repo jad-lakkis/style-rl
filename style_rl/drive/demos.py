@@ -63,36 +63,42 @@ def run_episode(env, cfg, ep):
 _WORKER = {}
 
 
-def _init_worker(args):
+def _env_for(store, track, rest):
     from .vec import make_env
-    _WORKER["env"] = make_env(0, *args)
+    if track not in store:
+        store[track] = make_env(0, track, *rest)
+    return store[track]
+
+
+def _init_worker(rest):
+    _WORKER["rest"], _WORKER["envs"] = rest, {}
 
 
 def _worker_episode(args):
-    cfg_dict, ep = args
+    cfg_dict, ep, track = args
     cfg = DemoConfig(**{k: tuple(v) if isinstance(v, list) else v for k, v in cfg_dict.items()})
-    return run_episode(_WORKER["env"], cfg, ep)
+    return run_episode(_env_for(_WORKER["envs"], track, _WORKER["rest"]), cfg, ep)
 
 
 def collect_episodes(cfg, env_args, start_method):
-    """env_args = (track_csv, envelope_json, backend, env_cfg). Episodes 0, 1, ... in order until >= n_transitions (the data does not depend on the number of workers)."""
+    """env_args = (tracks, envelope_json, backend, env_cfg). Episodes 0, 1, ... in order until >= n_transitions, episode e on track e % n_tracks (the data does not depend on the number of workers)."""
+    from .vec import as_tracks
+    tracks, rest = as_tracks(env_args[0]), tuple(env_args[1:])
     episodes, total = [], 0
     if cfg.workers <= 1:
-        from .vec import make_env
-        env = make_env(0, *env_args)
-        ep = 0
+        store, ep = {}, 0
         while total < cfg.n_transitions:
-            episodes.append(run_episode(env, cfg, ep))
+            episodes.append(run_episode(_env_for(store, tracks[ep % len(tracks)], rest), cfg, ep))
             total += len(episodes[-1]["actions"])
             ep += 1
         return episodes
     ctx = multiprocessing.get_context(start_method)
     d = asdict(cfg)
-    with ctx.Pool(cfg.workers, initializer=_init_worker, initargs=(env_args,)) as pool:
+    with ctx.Pool(cfg.workers, initializer=_init_worker, initargs=(rest,)) as pool:
         pending, ep = deque(), 0
         while total < cfg.n_transitions:
             while len(pending) < 2 * cfg.workers:
-                pending.append(pool.apply_async(_worker_episode, ((d, ep),)))
+                pending.append(pool.apply_async(_worker_episode, ((d, ep, tracks[ep % len(tracks)]),)))
                 ep += 1
             episodes.append(pending.popleft().get())
             total += len(episodes[-1]["actions"])
@@ -118,10 +124,11 @@ def assemble(episodes):
 
 
 def dataset_key(cfg, env_args):
-    track_csv, envelope_json, backend, env_cfg = env_args
+    from .vec import as_tracks
+    tracks, envelope_json, backend, env_cfg = as_tracks(env_args[0]), env_args[1], env_args[2], env_args[3]
     h = hashlib.sha256()
     h.update(json.dumps({"demo": {k: v for k, v in asdict(cfg).items() if k != "workers"}, "env": asdict(env_cfg), "backend": backend}, sort_keys=True, default=str).encode())
-    for p in (track_csv, envelope_json):
+    for p in (*tracks, envelope_json):
         h.update(Path(p).read_bytes())
     return h.hexdigest()
 

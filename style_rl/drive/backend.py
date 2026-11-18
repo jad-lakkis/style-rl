@@ -14,20 +14,21 @@ import warnings
 import numpy as np
 
 T_PT1_S, RATE_MAX_RADPS = 0.06, 0.5
+GRIP_KEYS = tuple(f"vehicle_dynamics_double_track.z.tire_model.{w}.{k}" for w in ("front_left", "front_right", "rear_left", "rear_right") for k in ("LMUX", "LMUY"))
 
 
 class _Steer:
     """Shadow of OCD's steering actuator: PT1 plus a rate limit, angle in rad."""
 
     def __init__(self, dt, lock):
-        self.dt, self.lock, self.angle = dt, lock, 0.0
+        self.dt, self.lock, self.angle, self.T = dt, lock, 0.0, T_PT1_S
 
     def reset(self, angle=0.0):
         self.angle = angle
 
     def step(self, command_norm):
         target = float(np.clip(command_norm, -1.0, 1.0)) * self.lock
-        nxt = self.angle + (1.0 - np.exp(-self.dt / T_PT1_S)) * (target - self.angle)
+        nxt = self.angle + (1.0 - np.exp(-self.dt / self.T)) * (target - self.angle)
         self.angle += float(np.clip(nxt - self.angle, -RATE_MAX_RADPS * self.dt, RATE_MAX_RADPS * self.dt))
         return self.angle
 
@@ -39,6 +40,14 @@ class MockBackend:
         self.env.max_steering_rad = steer_lock_rad
         self.control_dt = float(self.env.control_dt)
         self._steer = _Steer(self.control_dt, steer_lock_rad)
+        e = self.env
+        self._nominal = (e._ax.copy(), e._bx.copy(), e._ay.copy(), e.kd)
+
+    def set_randomization(self, d):
+        """Domain randomisation of the stand-in car (see randomize.py)."""
+        e, (ax, bx, ay, kd) = self.env, self._nominal
+        e._ax, e._bx, e._ay, e.kd = ax * d["drive"] / d["mass"], bx * d["brake"] / d["mass"], ay * d["grip"], kd * d["aero"]
+        self._steer.T = d["steer_lag_s"] or T_PT1_S
 
     def _state(self, o):
         return {"time_s": o["time_s"], "x": o["x"], "y": o["y"], "yaw": o["yaw"], "vx": o["vx"], "vy": o["vy"], "speed": o["speed"], "yaw_rate": o["yaw_rate"],
@@ -63,6 +72,21 @@ class OCDBackend:
         self.control_dt = float(self.env.control_dt)
         self.rolling_radius_m = float(self.env.params["vehicle_dynamics_double_track.tire.rolling_radius_m.rear"])
         self._steer = _Steer(self.control_dt, steer_lock_rad)
+        self._nominal = dict(self.env.params)
+
+    def set_randomization(self, d):
+        """Domain randomisation of the OCD car (see randomize.py): takes effect at the next reset (the parameters build the vehicle); the torque scales act at once."""
+        p = dict(self._nominal)
+        for k in GRIP_KEYS:
+            p[k] = self._nominal[k] * d["grip"]
+        for k in ("vehicle_dynamics_double_track.aerodynamics.c_l", "vehicle_dynamics_double_track.aerodynamics.c_d"):
+            p[k] = self._nominal[k] * d["aero"]
+        p["vehicle_dynamics_double_track.mass_vehicle_kg"] = self._nominal["vehicle_dynamics_double_track.mass_vehicle_kg"] * d["mass"]
+        if d["steer_lag_s"]:
+            p["steering_actuator.T_PT1"] = d["steer_lag_s"]
+        self.env.params = p
+        self.env.drive_scale, self.env.brake_scale = d["drive"], d["brake"]
+        self._steer.T = d["steer_lag_s"] or T_PT1_S
 
     def _slip(self):
         """Rear slip ratios (RL, RR) from the wheel speeds of the OCD output; (0, 0) if the output does not expose them."""

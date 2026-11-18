@@ -31,6 +31,7 @@ from .vec import DEFAULT_START_METHOD, build_vec_env, make_env
 class TrainConfig:
     out: str = "runs/drive/run"
     track_csv: str = "data/tracks/monza_geometry.csv"
+    tracks: tuple = ()                       # several track files: environment i drives track i % n, one policy learns them all; empty = track_csv only
     envelope_json: str = "data/ocd_envelope.json"
     backend: str = "ocd"
     seed: int = 0
@@ -59,6 +60,11 @@ class TrainConfig:
     guard_threshold: float = 0.5
     guard_rollback_lr: float = 1e-4
     guard_max_rollbacks: int = 1
+    init_mode: str = "bc"                    # "bc": copy the scripted driver first (staged start) | "bias": no demonstrations, the network starts from its output bias, nothing frozen
+    blend_steps: int = 0                     # > 0: the scripted driver assists the executed action with weight w(t) = blend_w0 * (1 - t / blend_steps): pure pursuit at the start, the agent alone at blend_steps
+    blend_w0: float = 0.9
+    blend_fraction: float = 0.85             # the assisting driver aims at this fraction of the QSS ceiling
+    blend_update: int = 1000
     eval_interval: int = 50_000
     eval_stochastic_laps: int = 5
     eval_seed: int = 0
@@ -170,9 +176,9 @@ class EvalCallback(BaseCallback):
     """Every `eval_interval` steps (and before the first online step): deterministic flying lap + stochastic laps; saves last.zip and the replay buffer; best.zip for the best clean
     deterministic lap 2; step_N.zip every `checkpoint_interval`."""
 
-    def __init__(self, cfg, eval_env, run):
+    def __init__(self, cfg, eval_envs, run):
         super().__init__()
-        self.cfg, self.eval_env, self.run = cfg, eval_env, run
+        self.cfg, self.eval_envs, self.run = cfg, eval_envs, run          # eval_envs: {track name: DrivingEnv}
         self.best = float("inf")
         self.next_eval = 0
         self.next_ckpt = cfg.checkpoint_interval
@@ -189,25 +195,60 @@ class EvalCallback(BaseCallback):
 
     def evaluate(self, n):
         t = time.time()
-        det = flying_lap(self.model, self.eval_env, deterministic=True, seed=self.cfg.eval_seed, trace=True)
-        sto = [flying_lap(self.model, self.eval_env, deterministic=False, seed=self.cfg.eval_seed + k) for k in range(self.cfg.eval_stochastic_laps)]
+        names = list(self.eval_envs)
+        dets = {k: flying_lap(self.model, e, deterministic=True, seed=self.cfg.eval_seed, trace=True) for k, e in self.eval_envs.items()}
+        det = dets[names[0]]                                                # the first track is the primary one (the top-level fields)
+        sto = [flying_lap(self.model, self.eval_envs[names[k % len(names)]], deterministic=False, seed=self.cfg.eval_seed + k) for k in range(self.cfg.eval_stochastic_laps)]
         clean_sto = [r for r in sto if r.clean]
+        score = float(np.mean([d.lap2_s / self.eval_envs[k].course.qss_lap_time_s for k, d in dets.items()])) if all(d.clean for d in dets.values()) else float("inf")   # lap 2 over the QSS ceiling, mean over tracks
         rec = {"step": n, "hours": round(self.run.hours(), 4), "det_clean": det.clean, "det_end": det.termination, "det_lap1_s": det.lap_times_s[0] if det.lap_times_s else None,
                "det_lap2_s": det.lap2_s, "sto_clean": len(clean_sto), "sto_laps": len(sto), "sto_lap2_mean_s": float(np.mean([r.lap2_s for r in clean_sto])) if clean_sto else None,
+               "tracks": {k: {"clean": d.clean, "lap2_s": d.lap2_s, "end": d.termination} for k, d in dets.items()}, "score": None if score == float("inf") else score,
                "alpha": self.model.alpha, "eval_wall_s": round(time.time() - t, 1)}
         append_jsonl(self.run.out / "evals.jsonl", rec)
         (self.run.out / "laps").mkdir(exist_ok=True)
-        np.savez_compressed(self.run.out / "laps" / f"eval_step_{n}.npz", **det.trace, lap_times_s=np.asarray(det.lap_times_s), clean=det.clean)
+        for k, d in dets.items():
+            tag = f"eval_step_{n}.npz" if len(dets) == 1 else f"eval_step_{n}_{k}.npz"
+            np.savez_compressed(self.run.out / "laps" / tag, **d.trace, lap_times_s=np.asarray(d.lap_times_s), clean=d.clean)
         save_atomic(self.model, self.run.out / "checkpoints" / "last.zip")
         save_buffer_atomic(self.model, self.run.out / "replay_buffer.pkl")
         new = ""
-        if det.clean and det.lap2_s < self.best:
-            self.best = det.lap2_s
+        if score < self.best:
+            self.best = score
             save_atomic(self.model, self.run.out / "checkpoints" / "best.zip")
             new = " NEW BEST"
-        self.run.status(state="running", step=n, best_clean_det_lap2_s=None if self.best == float("inf") else self.best)
-        print(f"  EVAL step {n}: det {'clean' if det.clean else det.termination} lap2 {det.lap2_s}, stochastic clean {len(clean_sto)}/{len(sto)}, "
-              f"{rec['eval_wall_s']:.0f} s{new}", flush=True)
+        self.run.status(state="running", step=n, best_score_lap2_over_qss=None if self.best == float("inf") else self.best)
+        per = ", ".join(f"{k} {d.lap2_s if d.clean else d.termination}" for k, d in dets.items())
+        print(f"  EVAL step {n}: det lap2 [{per}], stochastic clean {len(clean_sto)}/{len(sto)}, {rec['eval_wall_s']:.0f} s{new}", flush=True)
+
+
+class BlendCallback(BaseCallback):
+    """Anneals the scripted driver's weight in the executed action from blend_w0 to 0 over blend_steps steps (all environments)."""
+
+    def __init__(self, cfg, run):
+        super().__init__()
+        self.cfg, self.run, self.next, self.last_w = cfg, run, 0, None
+
+    def weight(self, n):
+        return max(0.0, self.cfg.blend_w0 * (1.0 - n / self.cfg.blend_steps))
+
+    def _set(self, n):
+        w = self.weight(n)
+        self.training_env.env_method("set_blend", w, self.cfg.blend_fraction)
+        self.logger.record("blend/teacher_weight", w)
+        if self.last_w is None or (w == 0.0 and self.last_w > 0.0):
+            self.run.event("blend", step=n, teacher_weight=round(w, 4))
+        self.last_w = w
+
+    def _on_training_start(self):
+        self._set(self.model.num_timesteps)
+
+    def _on_step(self):
+        n = self.model.num_timesteps
+        if n >= self.next:
+            self._set(n)
+            self.next = n + self.cfg.blend_update
+        return True
 
 
 class WallClock(BaseCallback):
@@ -229,10 +270,14 @@ def run(cfg, resume=False, log=print):
     th.set_num_threads(cfg.torch_threads)
     (out / "config.json").write_text(json.dumps(asdict(cfg), indent=1, default=str))
     r = Run(out)
-    env_args = (cfg.track_csv, cfg.envelope_json, cfg.backend, cfg.env)
-    vec = build_vec_env(cfg.n_envs, cfg.track_csv, cfg.envelope_json, cfg.backend, cfg.env, subprocess=cfg.n_envs > 1)
-    eval_env = make_env(0, cfg.track_csv, cfg.envelope_json, cfg.backend, cfg.env)
-    probe_env = make_env(0, cfg.track_csv, cfg.envelope_json, cfg.backend, replace(cfg.env, max_episode_s=cfg.guard_probe_s))
+    tracks = list(cfg.tracks) or [cfg.track_csv]
+    env_args = (tracks, cfg.envelope_json, cfg.backend, cfg.env)
+    vec = build_vec_env(cfg.n_envs, tracks, cfg.envelope_json, cfg.backend, cfg.env, subprocess=cfg.n_envs > 1)
+    eval_envs = {}
+    for t in tracks:
+        e = make_env(0, t, cfg.envelope_json, cfg.backend, cfg.env)
+        eval_envs[e.course.name] = e
+    probe_env = make_env(0, tracks[0], cfg.envelope_json, cfg.backend, replace(cfg.env, max_episode_s=cfg.guard_probe_s))
     model = ag.build_model(vec, hidden=cfg.hidden, lr=cfg.lr, batch_size=cfg.batch_size, buffer_size=cfg.buffer_size, gamma=cfg.env.reward.gamma, n_steps=cfg.n_steps,
                            gradient_steps=cfg.gradient_steps, ent_init=cfg.ent_init, seed=cfg.seed, device=cfg.device)
     model.set_logger(configure(str(out), ["csv"]))
@@ -245,6 +290,11 @@ def run(cfg, resume=False, log=print):
             model.load_replay_buffer(str(out / "replay_buffer.pkl"))
         baseline = float(json.loads((out / "status.json").read_text()).get("bc_baseline_m", 1000.0))
         r.event("resume", step=model.num_timesteps, frozen=model.freeze_actor)
+    elif cfg.init_mode == "bias":
+        ag.init_output_bias(model.actor)
+        baseline = probe(model, probe_env, starts)["mean_progress_m"]
+        r.status(state="running", init_mode="bias", bc_baseline_m=baseline)
+        r.event("init_bias_only", baseline_m=baseline)
     else:
         ag.init_output_bias(model.actor)
         demos, summary = ensure_demos(cfg.demo, env_args, cfg.demo_dir, start_method=DEFAULT_START_METHOD, log=log)
@@ -252,10 +302,12 @@ def run(cfg, resume=False, log=print):
         report = train_bc(model.actor, demos, seed=cfg.seed, max_epochs=cfg.bc_epochs, log=log)
         (out / "bc").mkdir(exist_ok=True)
         (out / "bc" / "report.json").write_text(json.dumps(report, indent=1))
-        gate = flying_lap(model, eval_env, deterministic=True, seed=cfg.eval_seed)
-        sto = [flying_lap(model, eval_env, deterministic=False, seed=cfg.eval_seed + k) for k in range(3)]
-        r.event("bc_gate", clean=gate.clean, end=gate.termination, lap2_s=gate.lap2_s, stochastic_clean=sum(x.clean for x in sto))
-        if not gate.clean and cfg.gate_required:
+        names = list(eval_envs)
+        gates = {k: flying_lap(model, e, deterministic=True, seed=cfg.eval_seed) for k, e in eval_envs.items()}
+        sto = [flying_lap(model, eval_envs[names[k % len(names)]], deterministic=False, seed=cfg.eval_seed + k) for k in range(3)]
+        gate_ok = all(g.clean for g in gates.values())
+        r.event("bc_gate", clean=gate_ok, per_track={k: (g.lap2_s if g.clean else g.termination) for k, g in gates.items()}, stochastic_clean=sum(x.clean for x in sto))
+        if not gate_ok and cfg.gate_required:
             r.status(state="bc_gate_failed")
             return model
         baseline = probe(model, probe_env, starts)["mean_progress_m"]
@@ -269,8 +321,10 @@ def run(cfg, resume=False, log=print):
             append_jsonl(out / "warmup.jsonl", {"block": b, "critic_loss": cl})
         r.event("offline_critic_done", blocks=cfg.offline_blocks, critic_loss=model.logger.name_to_value.get("train/critic_loss"))
     r.status(state="running")
-    cbs = [PhaseCallback(cfg.online_warmup_steps, r), CollapseGuard(lambda m: probe(m, probe_env, starts)["mean_progress_m"], baseline, cfg, r), EvalCallback(cfg, eval_env, r),
+    cbs = [PhaseCallback(cfg.online_warmup_steps, r), CollapseGuard(lambda m: probe(m, probe_env, starts)["mean_progress_m"], baseline, cfg, r), EvalCallback(cfg, eval_envs, r),
            WallClock(cfg.max_hours, r)]
+    if cfg.blend_steps > 0:
+        cbs.append(BlendCallback(cfg, r))
     try:
         model.learn(total_timesteps=max(cfg.total_steps - model.num_timesteps, 1), callback=CallbackList(cbs), reset_num_timesteps=False, log_interval=50)
     finally:

@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from style_rl.drive.config import EnvConfig  # noqa: E402
 from style_rl.drive.demos import DemoConfig  # noqa: E402
+from style_rl.drive.randomize import RandomizeConfig  # noqa: E402
 from style_rl.drive.train import TrainConfig, run  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--backend", default="ocd", choices=["ocd", "mock"])
     ap.add_argument("--track", default=str(ROOT / "data/tracks/monza_geometry.csv"))
+    ap.add_argument("--tracks", default="", help="comma-separated track names (data/tracks/<name>_geometry.csv): one policy trained on all of them, e.g. monza,barcelona,red_bull_ring,silverstone")
     ap.add_argument("--envelope", default=str(ROOT / "data/ocd_envelope.json"))
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-envs", type=int, default=4)
@@ -34,17 +36,25 @@ def main():
     ap.add_argument("--demo-dir", default=str(ROOT / "data/demos"))
     ap.add_argument("--eval-interval", type=int, default=50_000)
     ap.add_argument("--eval-stochastic", type=int, default=5)
+    ap.add_argument("--init", default="bc", choices=["bc", "bias"], help="bc: copy the scripted driver first; bias: no demonstrations")
+    ap.add_argument("--blend-steps", type=int, default=0, help="> 0: the scripted driver assists the executed action, its weight falling linearly from --blend-w0 to 0 over this many steps")
+    ap.add_argument("--blend-w0", type=float, default=0.9)
+    ap.add_argument("--blend-fraction", type=float, default=0.85)
+    ap.add_argument("--randomize", action="store_true", help="domain randomisation of the car and the sensors in every training episode (for the transfer to Assetto Corsa)")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="tiny settings to test the pipeline")
     ap.add_argument("--no-gate", action="store_true", help="continue even if the behaviour-cloned copy cannot finish a clean lap (tests only)")
     a = ap.parse_args()
-    cfg = TrainConfig(out=a.out, track_csv=a.track, envelope_json=a.envelope, backend=a.backend, seed=a.seed, n_envs=a.n_envs, gradient_steps=a.gradient_steps or max(a.n_envs // 2, 1),
+    tracks = tuple(str(ROOT / f"data/tracks/{t.strip()}_geometry.csv") for t in a.tracks.split(",") if t.strip())
+    cfg = TrainConfig(out=a.out, track_csv=a.track, tracks=tracks, envelope_json=a.envelope, backend=a.backend, seed=a.seed, n_envs=a.n_envs, gradient_steps=a.gradient_steps or max(a.n_envs // 2, 1),
                       device=a.device, total_steps=a.steps, max_hours=a.max_hours, eval_interval=a.eval_interval, eval_stochastic_laps=a.eval_stochastic, demo_dir=a.demo_dir,
-                      demo=DemoConfig(n_transitions=a.demo_transitions, workers=a.demo_workers))
+                      demo=DemoConfig(n_transitions=a.demo_transitions, workers=a.demo_workers), init_mode=a.init, blend_steps=a.blend_steps, blend_w0=a.blend_w0, blend_fraction=a.blend_fraction)
     if a.smoke:
         cfg = replace(cfg, total_steps=6000, demo=DemoConfig(n_transitions=4000, workers=1), bc_epochs=3, offline_blocks=2, offline_steps_per_block=200, online_warmup_steps=2000,
                       guard_interval=2000, guard_window=4000, guard_n_starts=3, guard_probe_s=10.0, eval_interval=3000, eval_stochastic_laps=1, checkpoint_interval=3000,
                       buffer_size=50_000, batch_size=128, hidden=(64, 64, 64))
+    if a.randomize:
+        cfg = replace(cfg, env=replace(cfg.env, randomize=RandomizeConfig(enabled=True)))
     if a.no_gate:
         cfg = replace(cfg, gate_required=False)
     run(cfg, resume=a.resume)
