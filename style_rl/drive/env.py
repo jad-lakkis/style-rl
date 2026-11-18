@@ -63,6 +63,8 @@ class DrivingEnv(gym.Env):
         self.evaluation = bool(evaluation)
         self._eval_default = self.evaluation
         self.state = None
+        self._prev_yaw = self._next_yaw = None
+        self.s_ref = 0.0
 
     # --- controls ----------------------------------------------------------------------------------
     def set_blend(self, teacher_weight, fraction=None):
@@ -81,7 +83,7 @@ class DrivingEnv(gym.Env):
         st, c = self.state, self.course
         self.q = c.match_centre(st["x"], st["y"])
         self.s = float(self.q["progress_m"])
-        _, self.e, h = c.match_ref(st["x"], st["y"])
+        self.s_ref, self.e, h = c.match_ref(st["x"], st["y"])         # station of the nearest point on the reference line: the preview and the track position are anchored on it
         self.heading_err = wrap(st["yaw"] - h)
 
     def _inside(self):
@@ -91,7 +93,9 @@ class DrivingEnv(gym.Env):
     # --- observation ------------------------------------------------------------------------------------
     def _ego(self):
         st, o = self.state, self.cfg.obs
-        cur = (st["vx"], st["vy"], st["yaw_rate"])
+        rate = st["yaw_rate"] if self._prev_yaw is None else wrap(st["yaw"] - self._prev_yaw) / self.cfg.dt_s       # yaw rate from the last two yaw samples, as the AC side computes it
+        self._next_yaw = st["yaw"]
+        cur = (st["vx"], st["vy"], rate)
         if self._prev_kin is None:
             ax = ay = 0.0
         else:
@@ -101,12 +105,13 @@ class DrivingEnv(gym.Env):
         self._next_kin = cur
         k = self.dr["slip_scale"]
         slip = lambda x: min(o.slip_clip, max(-o.slip_clip, o.slip_gain * k * x))
-        return np.array([math.hypot(st["vx"], st["vy"]) / o.speed_scale_mps, st["vx"] / o.speed_scale_mps, st["vy"] / o.vy_scale_mps, st["yaw_rate"] / o.yaw_rate_scale_radps,
+        return np.array([math.hypot(st["vx"], st["vy"]) / o.speed_scale_mps, st["vx"] / o.speed_scale_mps, st["vy"] / o.vy_scale_mps, rate / o.yaw_rate_scale_radps,
                          ax / o.accel_scale_mps2, ay / o.accel_scale_mps2, st["steer_actual"] / o.steer_scale_rad, slip(st["slip_rl"]), slip(st["slip_rr"])])
 
     def _push(self, ego):
         self._hist.appendleft(np.concatenate([ego, self.last_action]))
         self._prev_kin = self._next_kin
+        self._prev_yaw = self._next_yaw
 
     def _observation(self):
         st, o = self.state, self.cfg.obs
@@ -114,11 +119,11 @@ class DrivingEnv(gym.Env):
         noise = self.dr["obs_noise"]
         if noise > 0.0:
             ego = ego + noise * self._noise_ego * self.np_random.standard_normal(EGO)
-        pts = self.course.at(self.s + self.preview_d) - np.array([st["x"], st["y"]])          # (N, 3, 2): reference, left, right
+        pts = self.course.at(self.s_ref + self.preview_d) - np.array([st["x"], st["y"]])          # (N, 3, 2): reference, left, right
         c, s = math.cos(st["yaw"]), math.sin(st["yaw"])
         local = np.stack([c * pts[..., 0] + s * pts[..., 1], -s * pts[..., 0] + c * pts[..., 1]], axis=-1)
         preview = (local / self.preview_scale).ravel()
-        pos = self.course.track_position(st["x"], st["y"], self.s)
+        pos = self.course.track_position(st["x"], st["y"], self.s_ref)
         line = np.array([self.e / o.e_scale_m, self.heading_err / o.heading_scale_rad, pos])
         if noise > 0.0:
             line = line + noise * self._noise_line * self.np_random.standard_normal(3)
@@ -148,7 +153,7 @@ class DrivingEnv(gym.Env):
             return False
         self._geometry()
         self.last_action = np.array([0.0, -1.0, -1.0], dtype=np.float32)          # nothing pressed
-        self._prev_kin = None
+        self._prev_kin = self._prev_yaw = None
         placed = np.concatenate([self._ego(), self.last_action])
         self._hist = deque([placed] * (cfg.obs.history - 1), maxlen=cfg.obs.history - 1)
         self.demo.reset()

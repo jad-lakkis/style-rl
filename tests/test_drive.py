@@ -319,3 +319,31 @@ def test_multi_track_vector_env_and_demos(course):
     assert [c.name for c in venv.get_attr("course")] == ["monza", "barcelona", "monza", "barcelona"]
     eps = collect_episodes(DemoConfig(n_transitions=250, workers=1), (tracks, str(ENVELOPE), "mock", replace(EnvConfig(), max_episode_s=4.0)), "spawn")
     assert len(eps) >= 2 and all(len(e["actions"]) > 0 for e in eps)
+
+
+def test_ac_observation_builder_reproduces_the_environment_observation(course):
+    """Feed the states of an episode to the AC-side builder as telemetry packets (the field names and frames of the AC plugin): it must give the observation the environment gave."""
+    import math
+    from style_rl.drive.ac_obs import ACGeometry, ACObservation
+
+    def packet(st):
+        yaw, d = st["yaw"], st["steer_actual"]
+        c, s = math.cos(yaw), math.sin(yaw)
+        p = {"world_position_x": st["x"], "world_position_y": st["y"], "yaw": yaw, "timestamp_ac": st["time_s"],
+             "velocity_z": c * st["vx"] - s * st["vy"], "velocity_x": s * st["vx"] + c * st["vy"],       # the world velocity in the planar frame (x, y) = (AC z, AC x)
+             "tyre_slip_ratio_rl": st["slip_rl"], "tyre_slip_ratio_rr": st["slip_rr"]}
+        for w, a in (("FL", yaw + d), ("FR", yaw + d), ("RL", yaw), ("RR", yaw)):
+            p[f"tyreContactHeading_{w}_z"], p[f"tyreContactHeading_{w}_x"] = math.cos(a), math.sin(a)
+        return p
+
+    env = make_env(course)
+    env.reset(seed=4)
+    ac = ACObservation(ACGeometry.from_course(course))
+    ac.build(packet(env.state), env.last_action)
+    compared = 0
+    for obs, _, term, trunc, _ in drive(env, 60, fraction=0.7):
+        theirs = ac.build(packet(env.state), env.last_action)
+        if theirs is not None:
+            assert np.abs(theirs - obs).max() < 1e-3, np.argmax(np.abs(theirs - obs))
+            compared += 1
+    assert compared >= 50
