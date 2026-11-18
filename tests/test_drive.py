@@ -151,3 +151,37 @@ def test_both_pedals_act_as_commanded(course):
         return env.state["speed"]
     throttle_only, both, brake_only = speed_after(1.0, -1.0), speed_after(1.0, 0.0), speed_after(-1.0, 0.0)
     assert throttle_only > both > brake_only
+
+
+def test_portable_actor_matches_sb3_and_the_network_contract(course, tmp_path):
+    """The exported tensors, run by the NumPy-only runtime, give the SB3 actor's deterministic action; the ten tensors have the names and shapes of the AC runner's actor.
+    Set RLSETUP_REPO to a checkout of the RL-SetupOptimization-Agent repository to also run its own tensor validator on them."""
+    import os
+    import sys
+    import torch as th
+    from stable_baselines3.common.vec_env import DummyVecEnv
+    from style_rl.drive import agent as ag
+    from style_rl.drive.portable import KEYS, PortableActor, export_actor
+    venv = DummyVecEnv([lambda: make_env(course)])
+    model = ag.build_model(venv, buffer_size=1000, batch_size=64)
+    env = make_env(course)
+    obs, _ = env.reset(seed=1)
+    seen = [obs]
+    for _ in range(150):
+        obs, _, term, trunc, _ = env.step(model.predict(obs, deterministic=False)[0])
+        seen.append(obs)
+        if term or trunc:
+            obs, _ = env.reset(seed=2)
+    bundle = export_actor(model, tmp_path / "bundle", meta={"test": True}, course=course)
+    actor = PortableActor(bundle)
+    for o in seen:
+        assert np.allclose(actor.predict(o), model.predict(o, deterministic=True)[0], atol=1e-5)
+    assert actor.steer_lock_rad == EnvConfig().steer_lock_rad
+    with pytest.raises(FileExistsError):
+        export_actor(model, tmp_path / "bundle")
+    repo = os.environ.get("RLSETUP_REPO")
+    if repo:
+        sys.dont_write_bytecode = True
+        sys.path.insert(0, repo)
+        from rlsetup.assetto.actor import _validate_weights
+        _validate_weights({k: th.from_numpy(np.load(bundle / "actor.npz")[k].copy()) for k in KEYS})
