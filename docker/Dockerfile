@@ -15,7 +15,7 @@ RUN bash -c "source /opt/ros/humble/setup.bash && cd /opt/Open-Car-Dynamics && c
 RUN pip3 install "numpy<2" torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple \
  && pip3 install stable-baselines3 gymnasium pandas scipy tensorboard pytest matplotlib
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i "s/$//" /entrypoint.sh && chmod +x /entrypoint.sh
 WORKDIR /workspace/style-rl
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
