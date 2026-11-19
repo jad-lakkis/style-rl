@@ -285,8 +285,8 @@ class Course:
         p = np.array([x, y]) - right
         return float(2.0 * (p @ d) / (d @ d) - 1.0)
 
-    def wheels_inside(self, x, y, yaw, half_base, half_track):
-        """False if any wheel contact point lies outside the track edges."""
+    def wheels_inside(self, x, y, yaw, half_base, half_track, inset=0.0):
+        """False if any wheel contact point lies outside the track edges (`inset` m closer to the centre on both sides: a safety buffer for training)."""
         q = self.track.query(x, y)
         h = q["heading_rad"]
         nl = np.array([-np.sin(h), np.cos(h)])
@@ -295,6 +295,6 @@ class Course:
             for dy in (half_track, -half_track):
                 w = np.array([c * dx - s * dy, s * dx + c * dy])
                 lat = q["lateral_m"] + float(w @ nl)
-                if lat < -q["right_width_m"] or lat > q["left_width_m"]:
+                if lat < -(q["right_width_m"] - inset) or lat > q["left_width_m"] - inset:
                     return False
         return True

@@ -4,7 +4,8 @@ Network contract (the same as the actor of the Assetto Corsa runner in the RL-Se
     159 -> 256 -> 256 -> 256 (ReLU) -> mu (3) and log_std (3); deterministic action = tanh(mu); stochastic = tanh(mu + exp(clip(log_std, -20, 2)) * N(0, 1)).
 Tensors: latent_pi.{0,2,4}.{weight,bias}, mu.{weight,bias}, log_std.{weight,bias}.
 Action contract: [steering, throttle, brake] in [-1, 1]; steering +-1 = +-steer_lock_rad road-wheel angle (0.3 rad for our car, NOT the 0.6 rad that his AC runner assumes),
-pedal = clip((a + 0.5) / 1.5, 0, 1) for throttle and brake, both pedals act as commanded.
+pedal = clip((a + 0.5) / (pedal_full_at + 0.5), 0, 1) for throttle and brake, both pedals act as commanded (pedal_full_at is in the manifest; 1.0 = the original divisor 1.5 of his runner,
+a bundle with 0.7 needs a runner that reads it: his divisor would give 0.8 of the pedal where this gives 1.0).
 Observation contract: style_rl.drive.config.ObsConfig / env.py docstring (159 numbers); `OBS_COLUMNS` below names them in order.
 
     export_actor(model, "bundles/monza_a", meta={...})        # directory with actor.npz, actor.pt (tensors only), manifest.json
@@ -88,7 +89,7 @@ def export_actor(model, out_dir, *, meta=None, env_cfg=None, course=None):
                         "history": "the two previous decisions' ego + last-action blocks, newest first; at placement they hold the ego state and [0, -1, -1]",
                         "normalization": "fixed scales; rear slip clip(5*slip, -5, 5); final clip; no running normalization"},
         "action": {"names": ["steering", "throttle", "brake"], "bounds": [-1.0, 1.0], "steer_lock_rad": cfg.steer_lock_rad, "steering_positive": "left",
-                   "pedal_formula": "clip((a+0.5)/1.5, 0, 1)", "both_pedals_act": True, "decision_hz": 1.0 / cfg.dt_s},
+                   "pedal_formula": f"clip((a+0.5)/{cfg.pedal_full_at + 0.5:g}, 0, 1)", "pedal_full_at": cfg.pedal_full_at, "both_pedals_act": True, "decision_hz": 1.0 / cfg.dt_s},
         "reward": asdict(cfg.reward),
         "meta": meta or {},
     }
@@ -132,5 +133,6 @@ class PortableActor:
     def controls(self, action):
         """(steering road-wheel angle [rad], throttle pedal 0..1, brake pedal 0..1) for an action."""
         a = np.asarray(action, float)
-        pedals = np.clip((a[1:] + 0.5) / 1.5, 0.0, 1.0)
+        full_at = float(self.manifest["action"].get("pedal_full_at", 1.0))          # bundles exported before this field existed use the original mapping
+        pedals = np.clip((a[1:] + 0.5) / (full_at + 0.5), 0.0, 1.0)
         return float(a[0]) * self.steer_lock_rad, float(pedals[0]), float(pedals[1])

@@ -347,3 +347,153 @@ def test_ac_observation_builder_reproduces_the_environment_observation(course):
             assert np.abs(theirs - obs).max() < 1e-3, np.argmax(np.abs(theirs - obs))
             compared += 1
     assert compared >= 50
+
+
+# ---------------------------------------------------------------------------------------------------------------- pedal mapping, training inset, car presets, the F1 backend
+def test_default_pedal_mapping_is_the_original_one(course):
+    env = make_env(course)
+    for a in np.linspace(-1.0, 1.0, 41):
+        assert env._pedal(a) == pytest.approx(float(np.clip((a + 0.5) / 1.5, 0.0, 1.0)))
+    assert env._pedal(1.0) == 1.0 and env._pedal(0.9) < 1.0
+
+
+def test_pedal_full_at_gives_full_pedal_inside_the_range(course):
+    from style_rl.drive.config import action_from_pedal, pedal_from_action
+    from style_rl.drive.demo import pedal_to_action
+    cfg = replace(EnvConfig(), pedal_full_at=0.7)
+    env = make_env(course, cfg)
+    assert env._pedal(0.7) == 1.0 and env._pedal(0.95) == 1.0 and env._pedal(-0.5) == 0.0 and env._pedal(-0.9) == 0.0
+    assert env._pedal(0.1) == pytest.approx(0.5)                      # (0.1 + 0.5) / 1.2
+    for p in (0.05, 0.3, 0.77, 1.0):                                  # the scripted driver's action gives back the pedal it meant, for both mappings
+        for c in (EnvConfig(), cfg):
+            assert pedal_from_action(action_from_pedal(p, c), c) == pytest.approx(p)
+            assert pedal_from_action(pedal_to_action(p, c.pedal_deadzone, full_at=c.pedal_full_at), c) == pytest.approx(p)
+    assert action_from_pedal(0.0, cfg) == -0.8 and pedal_from_action(-0.8, cfg) == 0.0
+    with pytest.raises(ValueError):
+        replace(EnvConfig(), pedal_full_at=1.2)
+
+
+def test_demo_driver_takes_the_car_numbers_from_the_config(course):
+    env = make_env(course, replace(EnvConfig(), wheelbase_m=3.6, tc_start=0.06, tc_span=0.03))
+    assert (env.demo.wb, env.demo.tc_start, env.demo.tc_span) == (3.6, 0.06, 0.03)
+    default = make_env(course)
+    assert (default.demo.wb, default.demo.tc_start, default.demo.tc_span) == (2.8, 0.08, 0.12)
+
+
+def test_the_training_inset_is_a_training_only_buffer(course):
+    s = course.L - 400.0                                                  # on the main straight
+    centre = course._interp(course.center_xy, s)
+    left = course._interp(course.left_xy, s)
+    n_left = (left - centre) / np.linalg.norm(left - centre)
+    q = course.track.query(float(centre[0]), float(centre[1]))
+    off = q["left_width_m"] - 0.8 - 0.1                                   # the left wheels are 0.1 m inside the true edge
+    x, y = centre + off * n_left
+    assert course.wheels_inside(x, y, q["heading_rad"], 1.4, 0.8)
+    assert not course.wheels_inside(x, y, q["heading_rad"], 1.4, 0.8, inset=0.2)
+    env = make_env(course, replace(EnvConfig(), train_inset_m=0.2))
+    env.state = {"x": float(x), "y": float(y), "yaw": float(q["heading_rad"])}
+    env.evaluation = False
+    assert not env._inside()
+    env.evaluation = True
+    assert env._inside()
+
+
+def test_car_presets():
+    from style_rl.drive.cars import PRESETS, apply_preset
+    assert apply_preset("f317", EnvConfig()) == EnvConfig()
+    f1 = apply_preset("sf70h_f1", EnvConfig())
+    assert (f1.wheelbase_m, f1.wheel_half_base_m, f1.tc_start, f1.tc_span) == (3.6, 1.8, 0.06, 0.03) and PRESETS["sf70h_f1"].demo_fraction == (0.5, 0.8)
+    assert PRESETS["sf70h_f1"].backend == "ocdlap:sf70h_f1" and f1.steer_lock_rad == 0.30
+    with pytest.raises(ValueError):
+        apply_preset("nope", EnvConfig())
+
+
+STAND_IN_OCD_LAP = """
+import math
+from dataclasses import dataclass
+DT = .002
+@dataclass(frozen=True)
+class StartPose:
+    x: float = 0.
+    y: float = 0.
+    yaw: float = 0.
+    speed: float = 5.
+@dataclass(frozen=True)
+class Inputs:
+    steering_rad: float
+    throttle: float
+    brake: float
+class OCDBackend:
+    made = []
+    def __init__(self, *, powertrain='direct', max_drive_torque_Nm=270., max_brake_torque_Nm=None, overrides=None, car='av21', ers=None):
+        OCDBackend.made.append(dict(powertrain=powertrain, car=car, ers=ers))
+    def _state(self):
+        s = self.s
+        return dict(x=s['x'], y=s['y'], yaw=s['yaw'], vx=s['vx'], vy=0., yaw_rate=0., steer_actual=0.1, slip_rl=0.01, slip_rr=0.02)
+    def reset(self, setup, start_pose):
+        self.setup = setup
+        self.s = dict(x=start_pose.x, y=start_pose.y, yaw=start_pose.yaw, vx=start_pose.speed)
+        return self._state()
+    def step(self, inputs, steps=1):
+        self.last = (inputs, steps)
+        for _ in range(steps):
+            self.s['x'] += self.s['vx'] * math.cos(self.s['yaw']) * DT
+            self.s['y'] += self.s['vx'] * math.sin(self.s['yaw']) * DT
+        return self._state()
+"""
+STAND_IN_CARS = """
+from dataclasses import dataclass
+@dataclass(frozen=True)
+class Spec:
+    name: str
+    steer_max_rad: float = .3
+def get(car):
+    return Spec(car)
+def default_setup(car):
+    return 'default setup of ' + car
+"""
+NEUTRAL = {"grip": 1.0, "brake": 1.0, "drive": 1.0, "aero": 1.0, "mass": 1.0, "steer_lag_s": None, "slip_scale": 1.0, "action_delay": False, "obs_noise": 0.0}
+
+
+def test_the_f1_backend_adapter_on_a_stand_in_for_ocd_lap(tmp_path, monkeypatch):
+    """The adapter calls the OCDBackend of the ocd_lap package as documented there (engine powertrain, ERS off, the car's default setup, 20 physics steps per decision). The stand-in package is a few
+    lines written here, NOT the real code."""
+    import sys
+    pkg = tmp_path / "ocd_lap"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "backend.py").write_text(STAND_IN_OCD_LAP)
+    (pkg / "cars.py").write_text(STAND_IN_CARS)
+    gone = lambda: [m for m in sys.modules if m == "ocd_lap" or m.startswith("ocd_lap.")]
+    for name in gone():
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setenv("OCD_FIRST_LAP_DIR", str(tmp_path))
+    monkeypatch.setattr(sys, "path", [str(tmp_path)] + sys.path)
+    try:
+        b = make_backend("ocdlap:sf70h_f1", TRACK, 0.3, 0.04)
+        assert b.control_dt == 0.04 and b.n_sub == 20
+        s0 = b.reset(1.0, 2.0, 0.5, 30.0)
+        assert set(s0) == {"time_s", "x", "y", "yaw", "vx", "vy", "speed", "yaw_rate", "steer_actual", "slip_rl", "slip_rr"} and s0["time_s"] == 0.0 and s0["speed"] == 30.0
+        assert b.backend.setup == "default setup of sf70h_f1"
+        s1 = b.step(0.5, 1.3, -0.2)                                       # steering 0.5 of the 0.3 rad lock, pedals clipped to [0, 1]
+        inputs, steps = b.backend.last
+        assert (inputs.steering_rad, inputs.throttle, inputs.brake, steps) == (pytest.approx(0.15), 1.0, 0.0, 20)
+        assert s1["time_s"] == pytest.approx(0.04) and s1["x"] > s0["x"]
+        from ocd_lap.backend import OCDBackend
+        assert OCDBackend.made[-1] == {"powertrain": "engine", "car": "sf70h_f1", "ers": False}
+        b.set_randomization(NEUTRAL)
+        with pytest.raises(NotImplementedError):
+            b.set_randomization({**NEUTRAL, "grip": 0.9})
+        with pytest.raises(ValueError):                                   # above the car's actuator limit (0.3 rad in the stand-in)
+            make_backend("ocdlap:sf70h_f1", TRACK, 0.5, 0.04)
+        with pytest.raises(ValueError):                                   # not a whole number of 2 ms physics steps
+            make_backend("ocdlap:sf70h_f1", TRACK, 0.3, 0.0405)
+    finally:
+        for name in gone():
+            del sys.modules[name]
+
+
+def test_the_f1_backend_needs_its_folder(monkeypatch):
+    monkeypatch.delenv("OCD_FIRST_LAP_DIR", raising=False)
+    with pytest.raises(RuntimeError, match="OCD_FIRST_LAP_DIR"):
+        make_backend("ocdlap", TRACK, 0.3, 0.04)

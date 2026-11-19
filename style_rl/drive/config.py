@@ -46,7 +46,9 @@ class RewardConfig:
 class EnvConfig:
     dt_s: float = 0.04                   # one decision = the backend's control step (25 Hz)
     steer_lock_rad: float = 0.30         # steering action +-1 = +-this road-wheel angle (OCD's actuator limit)
-    pedal_deadzone: bool = True          # pedal = clip((a + 0.5) / 1.5, 0, 1) for throttle and brake alike; released = a <= -0.5
+    pedal_deadzone: bool = True          # pedal = clip((a + 0.5) / (pedal_full_at + 0.5), 0, 1) for throttle and brake alike; released = a <= -0.5
+    pedal_full_at: float = 1.0           # the action at which a pedal is fully pressed. 1.0 = the original mapping: full pedal only at a = 1, the very edge of the tanh range, which run a1 never reached (its
+                                         # throttle sat at 0.82-0.89 on the straights, raw action at most 0.988). 0.7 = full pedal for every a >= 0.7, so the policy does not have to sit at the edge
     max_episode_s: float = 60.           # training episodes are cut here (random start, not a whole lap)
     settle_s: float = 2.                 # the scripted driver drives this long before the hand-over (not part of the episode)
     start_speed_fraction: tuple = (.3, .7)    # f ~ U: the start speed is f * (lowest QSS speed over the settle window)
@@ -62,14 +64,38 @@ class EnvConfig:
     wheel_half_base_m: float = 1.4       # wheel contact points for the off-track test (a wheel outside the track = off track, as in Assetto Corsa)
     wheel_half_track_m: float = 0.8
     margin_m: float = 1.5                # the reference line stays this far inside both borders (a wheel is 0.95 m from the car centre: 1.0 m leaves no room for tracking error)
+    train_inset_m: float = 0.0           # training episodes only: the track counts this much narrower on both sides for the off-track test, a safety buffer (evaluation always uses the true edges)
+    wheelbase_m: float = 2.8             # the scripted driver's pure-pursuit wheelbase (Dallara F317 2.8 m, SF70H 3.6 m)
+    tc_start: float = 0.08               # the scripted driver's traction control: throttle *= max(0, 1 - (rear slip - tc_start) / tc_span); SF70H: 0.06 / 0.03 (the F1 tyre peaks at slip 0.075-0.08)
+    tc_span: float = 0.12
     grid_m: float = 1.0
     randomize: RandomizeConfig = field(default_factory=RandomizeConfig)    # domain randomisation (see randomize.py); off by default
     randomize_eval: bool = False         # randomise evaluation episodes too (off: lap times stay comparable)
     reward: RewardConfig = field(default_factory=RewardConfig)
     obs: ObsConfig = field(default_factory=ObsConfig)
 
+    def __post_init__(self):
+        if not -0.5 < self.pedal_full_at <= 1.0:
+            raise ValueError("pedal_full_at must be in (-0.5, 1]")
+        if self.train_inset_m < 0.0:
+            raise ValueError("train_inset_m must not be negative")
+
     def decisions(self, seconds):
         n = seconds / self.dt_s
         if abs(n - round(n)) > 1e-9:
             raise ValueError(f"{seconds} s is not a whole number of decisions of {self.dt_s} s")
         return int(round(n))
+
+
+def pedal_from_action(a, cfg):
+    """Throttle or brake pedal (0..1) for an action a in [-1, 1]: clip((a + 0.5) / (pedal_full_at + 0.5), 0, 1); without the dead zone (a + 1) / 2."""
+    if not cfg.pedal_deadzone:
+        return (float(a) + 1.0) / 2.0
+    return min(max((float(a) + 0.5) / (cfg.pedal_full_at + 0.5), 0.0), 1.0)
+
+
+def action_from_pedal(pedal, cfg, released=-0.8):
+    """The action that gives `pedal` (the inverse of pedal_from_action); no pedal is `released`."""
+    if not cfg.pedal_deadzone:
+        return 2.0 * pedal - 1.0
+    return -0.5 + (cfg.pedal_full_at + 0.5) * pedal if pedal > 0.0 else released

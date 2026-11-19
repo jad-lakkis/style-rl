@@ -1,4 +1,5 @@
 """Measure what the OCD car can do, as the limits a driver model needs (about 1 minute):   python scripts/measure_ocd_envelope.py [--backend ocd] [--out data/ocd_envelope.json]
+The F1 car of ocd_lap (needs OCD_FIRST_LAP_DIR):  python scripts/measure_ocd_envelope.py --backend ocdlap:sf70h_f1 --vmax 95 --steer-fractions 0.05,0.1,0.2,0.4,0.7,1.0 --out data/f1/ocd_envelope_sf70h_f1.json
 
 On the straight of Monza, for a grid of speeds:
   acceleration  full throttle, net forward acceleration (m/s2, drag included)
@@ -22,6 +23,20 @@ G = 9.81
 DT = 0.04
 V_GRID = np.arange(0.0, 101.0, 1.0)
 SPEEDS = np.arange(10.0, 86.0, 5.0)
+STEER_FRACTIONS = (0.4, 0.7, 1.0)          # of the steering lock; a fast car with downforce needs small ones at high speed, or no cornering sample there is valid
+
+
+class DriveBackendAsEnv:
+    """The measurements below were written for the old environment (reset(start_idx, speed), step_normalized); this lets them drive any style_rl.drive backend."""
+
+    def __init__(self, backend):
+        self.b = backend
+
+    def reset(self, start_idx=0, speed=10.0, pose=None):
+        return self.b.reset(0.0, 0.0, 0.0, float(speed))
+
+    def step_normalized(self, steer, throttle, brake, brake_priority=False):
+        return self.b.step(steer, throttle, brake)
 
 
 def run(env, v0, steer, policy, n):
@@ -55,7 +70,7 @@ def coast(env, v):
 
 def corner_samples(env, v):
     pts = []
-    for steer in (0.4, 0.7, 1.0):
+    for steer in STEER_FRACTIONS:
         out = run(env, v, steer, lambda o, k: (float(np.clip(0.45 + 0.3 * (v - o["speed"]), 0.0, 1.0)), float(np.clip(0.3 * (o["speed"] - v - 1.0), 0.0, 1.0))), 75)
         tail = out[-10:]
         sp = np.mean([o["speed"] for o in tail])
@@ -68,10 +83,19 @@ def corner_samples(env, v):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", choices=["ocd", "mock"], default="ocd")
+    ap.add_argument("--backend", default="ocd", help="ocd, mock, or ocdlap:<car> (the F1 car of ocd_lap)")
     ap.add_argument("--out", type=Path, default=Path("data/ocd_envelope.json"))
+    ap.add_argument("--vmax", type=float, default=85.0, help="highest speed measured (m/s); the F1 car needs about 95")
+    ap.add_argument("--steer-fractions", default="0.4,0.7,1.0", help="constant steering of the cornering test, as fractions of the lock")
     args = ap.parse_args()
-    env = make_backend(args.backend)
+    global SPEEDS, STEER_FRACTIONS
+    SPEEDS = np.arange(10.0, args.vmax + 1e-9, 5.0)
+    STEER_FRACTIONS = tuple(float(x) for x in args.steer_fractions.split(","))
+    if args.backend.startswith("ocdlap"):
+        from style_rl.drive.backend import make_backend as make_drive_backend
+        env = DriveBackendAsEnv(make_drive_backend(args.backend, None, 0.30, DT))
+    else:
+        env = make_backend(args.backend)
     acc = np.array([accel(env, v) for v in SPEEDS])
     brk = np.array([brake(env, v) for v in SPEEDS])
     dec = np.array([coast(env, v) for v in SPEEDS])
@@ -87,7 +111,7 @@ def main():
             lat[i] = pts[m, 1].max()
     ok = np.isfinite(lat)
     lat = np.interp(SPEEDS, SPEEDS[ok], lat[ok])
-    v_cap = 90.0
+    v_cap = float(args.vmax)
     below = np.where(acc <= 0.2)[0]
     if len(below):
         v_cap = float(SPEEDS[below[0]])

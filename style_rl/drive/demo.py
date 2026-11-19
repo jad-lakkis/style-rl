@@ -9,19 +9,25 @@ Traction control: throttle *= max(0, 1 - (rear slip - start) / span).
 import numpy as np
 
 
-def pedal_to_action(pedal, deadzone=True, released=-0.8):
+def pedal_to_action(pedal, deadzone=True, released=-0.8, full_at=1.0):
+    """The env action that gives `pedal` (see config.action_from_pedal; full_at = EnvConfig.pedal_full_at)."""
     if deadzone:
-        return -0.5 + 1.5 * pedal if pedal > 0.0 else released
+        return -0.5 + (full_at + 0.5) * pedal if pedal > 0.0 else released
     return 2.0 * pedal - 1.0
 
 
 class DemoDriver:
-    def __init__(self, course, cfg, kp=0.4, ki=0.2, integral_limit=5.0, brake_cap=1.0, look0=3.0, look_gain=0.35, wheelbase=2.8, tc_start=0.08, tc_span=0.12,
+    """wheelbase, tc_start and tc_span default to the car's numbers in the EnvConfig (wheelbase_m, tc_start, tc_span)."""
+
+    def __init__(self, course, cfg, kp=0.4, ki=0.2, integral_limit=5.0, brake_cap=1.0, look0=3.0, look_gain=0.35, wheelbase=None, tc_start=None, tc_span=None,
                  traction_control=True):
         self.course, self.cfg = course, cfg
         self.kp, self.ki, self.i_lim, self.brake_cap = kp, ki, integral_limit, brake_cap
-        self.look0, self.look_gain, self.wb = look0, look_gain, wheelbase
-        self.tc_start, self.tc_span, self.tc = tc_start, tc_span, traction_control
+        self.look0, self.look_gain = look0, look_gain
+        self.wb = cfg.wheelbase_m if wheelbase is None else wheelbase
+        self.tc_start = cfg.tc_start if tc_start is None else tc_start
+        self.tc_span = cfg.tc_span if tc_span is None else tc_span
+        self.tc = traction_control
         self.integral = 0.0
 
     def reset(self):
@@ -43,8 +49,8 @@ class DemoDriver:
         if self.tc and throttle > 0.0:
             slip = max(abs(state.get("slip_rl", 0.0)), abs(state.get("slip_rr", 0.0)))
             throttle *= max(0.0, 1.0 - (slip - self.tc_start) / self.tc_span)
-        dz = self.cfg.pedal_deadzone
-        return np.array([steer, pedal_to_action(throttle, dz), pedal_to_action(brake, dz)], dtype=np.float32)
+        dz, full = self.cfg.pedal_deadzone, self.cfg.pedal_full_at
+        return np.array([steer, pedal_to_action(throttle, dz, full_at=full), pedal_to_action(brake, dz, full_at=full)], dtype=np.float32)
 
     def lap_target(self, station, fraction, v):
         """Speed target on a lap: fraction of the QSS ceiling half a second ahead."""

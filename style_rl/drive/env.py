@@ -3,7 +3,8 @@
 Episode      training: the car is placed on the reference line at a random station with a random start speed (a fraction of the QSS ceiling), the scripted driver drives
              `settle_s` seconds (not part of the episode), then control passes to the agent for at most `max_episode_s` seconds. Evaluation: the same, but 200 m before the
              start line, and the agent drives `eval_laps` timed laps; lap 2 is the flying lap that is reported.
-Action       3 numbers in [-1, 1]: steering (+-1 = +-steer_lock_rad, + = left), throttle, brake (pedal = clip((a + 0.5) / 1.5, 0, 1); a <= -0.5 releases). Both pedals act as commanded (no brake priority), as in the original environment and in Assetto Corsa.
+Action       3 numbers in [-1, 1]: steering (+-1 = +-steer_lock_rad, + = left), throttle, brake (pedal = clip((a + 0.5) / (pedal_full_at + 0.5), 0, 1); a <= -0.5 releases; pedal_full_at 1.0 = the original
+             1.5 divisor, 0.7 = full pedal from a = 0.7 up). Both pedals act as commanded (no brake priority), as in the original environment and in Assetto Corsa.
 Observation  159 numbers, the frozen contract in config.py:
                ego (9)     speed, v_x, v_y, yaw rate, a_x, a_y (body frame, from the last decision), actual steer angle, rear slip ratios RL, RR
                line (3)    lateral offset e to the reference line, heading error to it, position across the track (-1 right edge .. +1 left edge)
@@ -23,7 +24,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from .config import EnvConfig, OBS_DIM
+from .config import EnvConfig, OBS_DIM, pedal_from_action
 from . import randomize
 from .demo import DemoDriver
 
@@ -73,7 +74,7 @@ class DrivingEnv(gym.Env):
             self.teacher_f = float(fraction)
 
     def _pedal(self, a):
-        return float(np.clip((a + 0.5) / 1.5, 0.0, 1.0)) if self.cfg.pedal_deadzone else float((a + 1.0) / 2.0)
+        return pedal_from_action(a, self.cfg)
 
     def _controls(self, action):
         return float(action[0]), self._pedal(action[1]), self._pedal(action[2])
@@ -88,7 +89,8 @@ class DrivingEnv(gym.Env):
 
     def _inside(self):
         st, c, cfg = self.state, self.course, self.cfg
-        return c.wheels_inside(st["x"], st["y"], st["yaw"], cfg.wheel_half_base_m, cfg.wheel_half_track_m)
+        inset = 0.0 if self.evaluation else cfg.train_inset_m          # the safety buffer exists in training only; a test lap is judged on the true edges
+        return c.wheels_inside(st["x"], st["y"], st["yaw"], cfg.wheel_half_base_m, cfg.wheel_half_track_m, inset)
 
     # --- observation ------------------------------------------------------------------------------------
     def _ego(self):

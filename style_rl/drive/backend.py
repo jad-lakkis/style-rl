@@ -9,7 +9,10 @@
   steer_actual   the mean of steering_angle_per_wheel_rad.front_left / front_right (the actuator is a PT1, T = 0.06 s, rate limit 0.5 rad/s, lock 0.3 rad)
   slip_rl, rr    vehicle_dynamics_output.tire_longitudinal_slip_per_wheel.rear_left / rear_right: the tyre model's own slip ratio, the counterpart of Assetto Corsa's tyre slip ratio
 The mock tracks the steering with the same PT1 law and has no slip.
+`ocdlap` / `ocdlap:sf70h_f1` is the F1 car of Ibrahim Khaled's ocd_lap package (his patched OCD build, F1 engine and gearbox), see OcdLapBackend.
 """
+import math
+
 import numpy as np
 
 T_PT1_S, RATE_MAX_RADPS = 0.06, 0.5
@@ -103,9 +106,65 @@ class OCDBackend:
         return self._state(self.env.step_normalized(steer, throttle, brake, brake_priority=False))
 
 
+class OcdLapBackend:
+    """The F1 cars of Ibrahim Khaled's `ocd_lap` package (his private repository `ocd_first_lap`, branch sf70h-f1; we only READ it): his patched Open-Car-Dynamics build (`ocd_native`), the
+    SF70H-like car, the F1 engine with its automatic gearbox (python, at the 2 ms physics rate) and his default setup of that car (heave elements on, brake bias 0.58). The electric motor is off.
+
+    Where it is found: the folder named by the environment variable OCD_FIRST_LAP_DIR (or `repo`), a BUILD COPY of the repository: ocd_lap/, the built ocd_native module and
+    vendor/Open-Car-Dynamics (the pinned commit with his patches); see runpod/setup_ocdlap.sh. None of his files are in this repository. Name: "ocdlap" or "ocdlap:<car>" (sf70h_f1, sf70h_tum).
+    One decision = control_dt / 2 ms physics steps with the pedals held. No domain randomisation.
+    """
+
+    def __init__(self, track_csv, steer_lock_rad=0.30, dt=0.04, car="sf70h_f1", ers=False, repo=None):
+        import os
+        import sys
+        from pathlib import Path
+        root = repo or os.environ.get("OCD_FIRST_LAP_DIR")
+        if not root or not (Path(root) / "ocd_lap").is_dir():
+            raise RuntimeError("OCD_FIRST_LAP_DIR must name the build copy of ocd_first_lap (with ocd_lap/, the built ocd_native module and vendor/Open-Car-Dynamics)")
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from ocd_lap import cars
+        from ocd_lap.backend import DT, Inputs, OCDBackend, StartPose
+        self._inputs, self._pose = Inputs, StartPose
+        self.car, self.spec = car, cars.get(car)
+        if steer_lock_rad > self.spec.steer_max_rad + 1e-9:
+            raise ValueError(f"steering lock {steer_lock_rad} rad is above the car's actuator limit {self.spec.steer_max_rad} rad")
+        self.setup = cars.default_setup(car)
+        self.backend = OCDBackend(powertrain="engine", car=car, ers=ers)
+        self.steer_lock = float(steer_lock_rad)
+        self.control_dt = float(dt)
+        self.n_sub = int(round(dt / DT))
+        if self.n_sub < 1 or abs(self.n_sub * DT - dt) > 1e-9:
+            raise ValueError(f"the control step {dt} s is not a whole number of {DT} s physics steps")
+        self._t = 0.0
+
+    def set_randomization(self, d):
+        neutral = d["grip"] == d["brake"] == d["drive"] == d["aero"] == d["mass"] == d["slip_scale"] == 1.0 and d["steer_lag_s"] is None
+        if not neutral:
+            raise NotImplementedError("the F1 backend has no domain randomisation")
+
+    def _state(self, s):
+        return {"time_s": self._t, "x": s["x"], "y": s["y"], "yaw": s["yaw"], "vx": s["vx"], "vy": s["vy"], "speed": math.hypot(s["vx"], s["vy"]), "yaw_rate": s["yaw_rate"],
+                "steer_actual": s["steer_actual"], "slip_rl": s["slip_rl"], "slip_rr": s["slip_rr"]}
+
+    def reset(self, x, y, yaw, speed):
+        self._t = 0.0
+        return self._state(self.backend.reset(self.setup, self._pose(float(x), float(y), float(yaw), float(speed))))
+
+    def step(self, steer, throttle, brake):
+        clip = lambda v: min(max(float(v), 0.0), 1.0)
+        inputs = self._inputs(float(steer) * self.steer_lock, clip(throttle), clip(brake))
+        s = self.backend.step(inputs, steps=self.n_sub)
+        self._t += self.control_dt
+        return self._state(s)
+
+
 def make_backend(name, track_csv, steer_lock_rad=0.30, dt=0.04):
     if name == "ocd":
         return OCDBackend(track_csv, steer_lock_rad, dt)
     if name == "mock":
         return MockBackend(track_csv, steer_lock_rad, dt)
+    if name == "ocdlap" or name.startswith("ocdlap:"):
+        return OcdLapBackend(track_csv, steer_lock_rad, dt, car=name.split(":", 1)[1] if ":" in name else "sf70h_f1")
     raise ValueError(f"unknown backend {name!r}")
