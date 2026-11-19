@@ -380,6 +380,15 @@ def test_demo_driver_takes_the_car_numbers_from_the_config(course):
     assert (default.demo.wb, default.demo.tc_start, default.demo.tc_span) == (2.8, 0.08, 0.12)
 
 
+def test_demo_driver_caps_the_brake_pedal_at_the_cars_value(course):
+    for cap in (1.0, 0.3):
+        env = make_env(course, replace(EnvConfig(), demo_brake_cap=cap))
+        env.reset(seed=1)
+        assert env.demo.brake_cap == cap
+        a = env.demo.act(env.state, env.s, 0.0)                            # a target of 0 m/s: the speed PI asks for the hardest braking
+        assert env._pedal(a[2]) == pytest.approx(cap, abs=1e-6) and env._pedal(a[1]) == 0.0
+
+
 def test_the_training_inset_is_a_training_only_buffer(course):
     s = course.L - 400.0                                                  # on the main straight
     centre = course._interp(course.center_xy, s)
@@ -403,7 +412,8 @@ def test_car_presets():
     assert apply_preset("f317", EnvConfig()) == EnvConfig()
     f1 = apply_preset("sf70h_f1", EnvConfig())
     assert (f1.wheelbase_m, f1.wheel_half_base_m, f1.tc_start, f1.tc_span) == (3.6, 1.8, 0.06, 0.03) and PRESETS["sf70h_f1"].demo_fraction == (0.5, 0.8)
-    assert PRESETS["sf70h_f1"].backend == "ocdlap:sf70h_f1" and f1.steer_lock_rad == 0.30
+    assert PRESETS["sf70h_f1"].backend == "ocdlap:sf70h_f1:p1_TUM_f1" and f1.steer_lock_rad == 0.30
+    assert f1.demo_brake_cap == 0.3 and EnvConfig().demo_brake_cap == 1.0 and PRESETS["sf70h_f1"].train == {"gate_required": False} and PRESETS["f317"].train == {}
     with pytest.raises(ValueError):
         apply_preset("nope", EnvConfig())
 
@@ -442,15 +452,25 @@ class OCDBackend:
         return self._state()
 """
 STAND_IN_CARS = """
+import dataclasses
 from dataclasses import dataclass
 @dataclass(frozen=True)
 class Spec:
     name: str
     steer_max_rad: float = .3
+@dataclass(frozen=True)
+class FakeSetup:
+    heave_damping_ratio: float = 0.
+    roll_stiffness_front_share: float = .61
+    aero_front_share: float = .45
+    lsd_lock_drive: float = 0.
+    brake_bias_front: float = .58
+    def replace(self, **changes):
+        return dataclasses.replace(self, **changes)
 def get(car):
     return Spec(car)
 def default_setup(car):
-    return 'default setup of ' + car
+    return FakeSetup()
 """
 NEUTRAL = {"grip": 1.0, "brake": 1.0, "drive": 1.0, "aero": 1.0, "mass": 1.0, "steer_lag_s": None, "slip_scale": 1.0, "action_delay": False, "obs_noise": 0.0}
 
@@ -474,7 +494,12 @@ def test_the_f1_backend_adapter_on_a_stand_in_for_ocd_lap(tmp_path, monkeypatch)
         assert b.control_dt == 0.04 and b.n_sub == 20
         s0 = b.reset(1.0, 2.0, 0.5, 30.0)
         assert set(s0) == {"time_s", "x", "y", "yaw", "vx", "vy", "speed", "yaw_rate", "steer_actual", "slip_rl", "slip_rr"} and s0["time_s"] == 0.0 and s0["speed"] == 30.0
-        assert b.backend.setup == "default setup of sf70h_f1"
+        assert b.setup_name == "p1_TUM_f1"                                   # the setup of his F1 runs: heave damping 0.3 (the car porpoises without it) and the p1_TUM knobs, brake bias kept
+        assert (b.backend.setup.heave_damping_ratio, b.backend.setup.roll_stiffness_front_share, b.backend.setup.aero_front_share, b.backend.setup.lsd_lock_drive,
+                b.backend.setup.brake_bias_front) == (0.3, 0.4533, 0.4508, 1.0, 0.58)
+        assert make_backend("ocdlap:sf70h_f1:default", TRACK, 0.3, 0.04).setup.heave_damping_ratio == 0.0
+        with pytest.raises(ValueError):
+            make_backend("ocdlap:sf70h_f1:nope", TRACK, 0.3, 0.04)
         s1 = b.step(0.5, 1.3, -0.2)                                       # steering 0.5 of the 0.3 rad lock, pedals clipped to [0, 1]
         inputs, steps = b.backend.last
         assert (inputs.steering_rad, inputs.throttle, inputs.brake, steps) == (pytest.approx(0.15), 1.0, 0.0, 20)
@@ -497,3 +522,22 @@ def test_the_f1_backend_needs_its_folder(monkeypatch):
     monkeypatch.delenv("OCD_FIRST_LAP_DIR", raising=False)
     with pytest.raises(RuntimeError, match="OCD_FIRST_LAP_DIR"):
         make_backend("ocdlap", TRACK, 0.3, 0.04)
+
+
+def test_the_reference_line_can_come_from_a_file(tmp_path):
+    from style_rl.drive.course import GridTrack, min_curvature_line
+    gt = GridTrack(TRACK)
+    n10, _ = min_curvature_line(gt, 1.0)
+    csv = tmp_path / "line.csv"
+    np.savetxt(csv, np.column_stack([gt.s, n10]), delimiter=",", header="s_m,offset_m", comments="", fmt="%.6f")
+    from_file = Course(TRACK, ENVELOPE, margin_m=1.5, line_csv=csv)                  # the margin argument is ignored when a line is given
+    reference = Course(TRACK, ENVELOPE, margin_m=1.0)
+    assert from_file.qss_lap_time_s == pytest.approx(reference.qss_lap_time_s, abs=0.02)
+    assert from_file.qss_lap_time_s < Course(TRACK, ENVELOPE, margin_m=1.5).qss_lap_time_s - 0.5
+    assert np.abs(from_file.ref_xy - reference.ref_xy).max() < 0.05
+    bad = tmp_path / "bad.csv"
+    np.savetxt(bad, np.column_stack([gt.s[:-5], n10[:-5]]), delimiter=",", header="s_m,offset_m", comments="", fmt="%.6f")
+    with pytest.raises(ValueError):
+        Course(TRACK, ENVELOPE, line_csv=bad)
+    env = make_env(from_file, replace(EnvConfig(), ref_line=str(csv)))
+    assert env.cfg.ref_line == str(csv)

@@ -17,12 +17,13 @@ def pedal_to_action(pedal, deadzone=True, released=-0.8, full_at=1.0):
 
 
 class DemoDriver:
-    """wheelbase, tc_start and tc_span default to the car's numbers in the EnvConfig (wheelbase_m, tc_start, tc_span)."""
+    """wheelbase, tc_start, tc_span and brake_cap default to the car's numbers in the EnvConfig (wheelbase_m, tc_start, tc_span, demo_brake_cap)."""
 
-    def __init__(self, course, cfg, kp=0.4, ki=0.2, integral_limit=5.0, brake_cap=1.0, look0=3.0, look_gain=0.35, wheelbase=None, tc_start=None, tc_span=None,
+    def __init__(self, course, cfg, kp=0.4, ki=0.2, integral_limit=5.0, brake_cap=None, look0=3.0, look_gain=0.35, wheelbase=None, tc_start=None, tc_span=None,
                  traction_control=True):
         self.course, self.cfg = course, cfg
-        self.kp, self.ki, self.i_lim, self.brake_cap = kp, ki, integral_limit, brake_cap
+        self.kp, self.ki, self.i_lim = kp, ki, integral_limit
+        self.brake_cap = cfg.demo_brake_cap if brake_cap is None else brake_cap
         self.look0, self.look_gain = look0, look_gain
         self.wb = cfg.wheelbase_m if wheelbase is None else wheelbase
         self.tc_start = cfg.tc_start if tc_start is None else tc_start

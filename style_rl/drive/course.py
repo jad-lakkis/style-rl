@@ -198,12 +198,23 @@ def speed_profile(kappa, seg, env):
 
 
 # ------------------------------------------------------------------ the course
+def load_line(path, track):
+    """Lateral offsets (m, + = left of the centre line) on the track's 2 m grid from a csv with the columns s_m, offset_m (tools/optimise_line.py)."""
+    d = pd.read_csv(path)
+    if len(d) != len(track.s) or not np.allclose(d["s_m"].to_numpy(), track.s, atol=1e-2):
+        raise ValueError(f"{path}: the line is not on the 2 m grid of this track ({len(d)} rows, {len(track.s)} expected)")
+    return d["offset_m"].to_numpy(float)
+
+
 class Course:
-    def __init__(self, track_csv, envelope_json, margin_m=1.0, grid_m=1.0):
+    def __init__(self, track_csv, envelope_json, margin_m=1.0, grid_m=1.0, line_csv=None):
+        """line_csv: the reference line from a file (see load_line) instead of the minimum-curvature line `margin_m` inside the borders."""
         self.track = tr = GridTrack(track_csv)
         self.name, self.L = tr.name, tr.length_m
         self.envelope = load_envelope(envelope_json)
         n2, nl2 = min_curvature_line(tr, margin_m)
+        if line_csv:
+            n2 = load_line(line_csv, tr)
         path2 = tr.center_grid + nl2 * n2[:, None]
         kappa, seg = path_geometry(path2)
         v2, self.qss_lap_time_s = speed_profile(kappa, seg, self.envelope)

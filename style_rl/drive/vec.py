@@ -12,7 +12,7 @@ def make_env(rank, track_csv, envelope_json, backend, cfg):
     from .backend import make_backend
     from .course import Course
     from .env import DrivingEnv
-    course = Course(track_csv, envelope_json, margin_m=cfg.margin_m, grid_m=cfg.grid_m)
+    course = Course(track_csv, envelope_json, margin_m=cfg.margin_m, grid_m=cfg.grid_m, line_csv=cfg.ref_line or None)
     return DrivingEnv(course, make_backend(backend, track_csv, cfg.steer_lock_rad, cfg.dt_s), cfg)
 
 

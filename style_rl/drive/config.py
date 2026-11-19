@@ -68,6 +68,8 @@ class EnvConfig:
     wheelbase_m: float = 2.8             # the scripted driver's pure-pursuit wheelbase (Dallara F317 2.8 m, SF70H 3.6 m)
     tc_start: float = 0.08               # the scripted driver's traction control: throttle *= max(0, 1 - (rear slip - tc_start) / tc_span); SF70H: 0.06 / 0.03 (the F1 tyre peaks at slip 0.075-0.08)
     tc_span: float = 0.12
+    demo_brake_cap: float = 1.0          # the scripted driver never presses the brake pedal harder than this (the F1 car with 15 kN m of brakes locks its wheels above about 0.3)
+    ref_line: str = ""                   # csv of the reference line (s_m, offset_m on the 2 m grid, tools/optimise_line.py); "" = the minimum-curvature line margin_m inside the borders
     grid_m: float = 1.0
     randomize: RandomizeConfig = field(default_factory=RandomizeConfig)    # domain randomisation (see randomize.py); off by default
     randomize_eval: bool = False         # randomise evaluation episodes too (off: lap times stay comparable)

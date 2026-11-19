@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--tracks", default="", help="comma-separated track names (data/tracks/<name>_geometry.csv): one policy trained on all of them, e.g. monza,barcelona,red_bull_ring,silverstone")
     ap.add_argument("--envelope", default=None, help="the car's limits (json from scripts/measure_ocd_envelope.py); default: the car's")
     ap.add_argument("--pedal-full-at", type=float, default=None, help="the action at which a pedal is fully pressed (default 1.0 = the original mapping, run a1; 0.7 = full pedal for every action >= 0.7)")
+    ap.add_argument("--ref-line", default=None, help="csv of the reference line (s_m, offset_m; tools/optimise_line.py) instead of the minimum-curvature line; the line the policy is pulled towards and the QSS speeds are computed on")
     ap.add_argument("--train-inset-m", type=float, default=None, help="training only: the track counts this much narrower on both sides for the off-track test (a safety buffer); evaluation uses the true edges")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-envs", type=int, default=4)
@@ -59,11 +60,15 @@ def main():
         env = replace(env, pedal_full_at=a.pedal_full_at)
     if a.train_inset_m is not None:
         env = replace(env, train_inset_m=a.train_inset_m)
+    if a.ref_line:
+        env = replace(env, ref_line=str(Path(a.ref_line).resolve()))
     cfg = TrainConfig(out=a.out, track_csv=a.track, tracks=tracks, envelope_json=a.envelope or str(ROOT / preset.envelope), backend=a.backend or preset.backend, seed=a.seed, n_envs=a.n_envs,
                       gradient_steps=a.gradient_steps or max(a.n_envs // 2, 1), device=a.device, torch_threads=a.torch_threads, total_steps=a.steps, buffer_size=a.buffer_size, max_hours=a.max_hours,
                       eval_interval=a.eval_interval, eval_stochastic_laps=a.eval_stochastic, demo_dir=a.demo_dir,
                       demo=DemoConfig(n_transitions=a.demo_transitions, workers=a.demo_workers, fraction_range=preset.demo_fraction), init_mode=a.init, blend_steps=a.blend_steps, blend_w0=a.blend_w0,
                       blend_fraction=a.blend_fraction, env=env)
+    if preset.train:
+        cfg = replace(cfg, **preset.train)
     if a.smoke:
         cfg = replace(cfg, total_steps=6000, demo=DemoConfig(n_transitions=4000, workers=1), bc_epochs=3, offline_blocks=2, offline_steps_per_block=200, online_warmup_steps=2000,
                       guard_interval=2000, guard_window=4000, guard_n_starts=3, guard_probe_s=10.0, eval_interval=3000, eval_stochastic_laps=1, checkpoint_interval=3000,

@@ -9,7 +9,7 @@
   steer_actual   the mean of steering_angle_per_wheel_rad.front_left / front_right (the actuator is a PT1, T = 0.06 s, rate limit 0.5 rad/s, lock 0.3 rad)
   slip_rl, rr    vehicle_dynamics_output.tire_longitudinal_slip_per_wheel.rear_left / rear_right: the tyre model's own slip ratio, the counterpart of Assetto Corsa's tyre slip ratio
 The mock tracks the steering with the same PT1 law and has no slip.
-`ocdlap` / `ocdlap:sf70h_f1` is the F1 car of Ibrahim Khaled's ocd_lap package (his patched OCD build, F1 engine and gearbox), see OcdLapBackend.
+`ocdlap` / `ocdlap:sf70h_f1[:setup]` is the F1 car of Ibrahim Khaled's ocd_lap package (his patched OCD build, F1 engine and gearbox), see OcdLapBackend.
 """
 import math
 
@@ -111,11 +111,18 @@ class OcdLapBackend:
     SF70H-like car, the F1 engine with its automatic gearbox (python, at the 2 ms physics rate) and his default setup of that car (heave elements on, brake bias 0.58). The electric motor is off.
 
     Where it is found: the folder named by the environment variable OCD_FIRST_LAP_DIR (or `repo`), a BUILD COPY of the repository: ocd_lap/, the built ocd_native module and
-    vendor/Open-Car-Dynamics (the pinned commit with his patches); see runpod/setup_ocdlap.sh. None of his files are in this repository. Name: "ocdlap" or "ocdlap:<car>" (sf70h_f1, sf70h_tum).
+    vendor/Open-Car-Dynamics (the pinned commit with his patches); see runpod/setup_ocdlap.sh. None of his files are in this repository. Name: "ocdlap", "ocdlap:<car>" or
+    "ocdlap:<car>:<setup>" (cars sf70h_f1, sf70h_tum; setups default, p1_TUM_f1).
     One decision = control_dt / 2 ms physics steps with the pedals held. No domain randomisation.
+
+    Setup p1_TUM_f1 = the setup of his F1 runs (rlsetup/driving/setups.py of his public RL repository): the car's own default setup (heave springs on, brake bias 0.58) with the p1_TUM knobs
+    roll_stiffness_front_share 0.4533, aero_front_share 0.4508, lsd_lock_drive 1.0, and heave_damping_ratio 0.3, a PLACEHOLDER value that cuts the 4.5 Hz porpoising of the car about tenfold
+    (without heave damping the ride mode grows with speed and the car's settle collapses above about 75 m/s). The setup "default" is the car's own, undamped one.
     """
 
-    def __init__(self, track_csv, steer_lock_rad=0.30, dt=0.04, car="sf70h_f1", ers=False, repo=None):
+    SETUPS = {"default": {}, "p1_TUM_f1": {"roll_stiffness_front_share": 0.4533, "aero_front_share": 0.4508, "lsd_lock_drive": 1.0, "heave_damping_ratio": 0.3}}
+
+    def __init__(self, track_csv, steer_lock_rad=0.30, dt=0.04, car="sf70h_f1", ers=False, repo=None, setup="p1_TUM_f1"):
         import os
         import sys
         from pathlib import Path
@@ -130,7 +137,12 @@ class OcdLapBackend:
         self.car, self.spec = car, cars.get(car)
         if steer_lock_rad > self.spec.steer_max_rad + 1e-9:
             raise ValueError(f"steering lock {steer_lock_rad} rad is above the car's actuator limit {self.spec.steer_max_rad} rad")
+        if setup not in self.SETUPS:
+            raise ValueError(f"unknown setup {setup!r}; choose from {sorted(self.SETUPS)}")
+        self.setup_name = setup
         self.setup = cars.default_setup(car)
+        if self.SETUPS[setup]:
+            self.setup = self.setup.replace(**self.SETUPS[setup])
         self.backend = OCDBackend(powertrain="engine", car=car, ers=ers)
         self.steer_lock = float(steer_lock_rad)
         self.control_dt = float(dt)
@@ -166,5 +178,6 @@ def make_backend(name, track_csv, steer_lock_rad=0.30, dt=0.04):
     if name == "mock":
         return MockBackend(track_csv, steer_lock_rad, dt)
     if name == "ocdlap" or name.startswith("ocdlap:"):
-        return OcdLapBackend(track_csv, steer_lock_rad, dt, car=name.split(":", 1)[1] if ":" in name else "sf70h_f1")
+        parts = name.split(":")
+        return OcdLapBackend(track_csv, steer_lock_rad, dt, car=parts[1] if len(parts) > 1 else "sf70h_f1", setup=parts[2] if len(parts) > 2 else "p1_TUM_f1")
     raise ValueError(f"unknown backend {name!r}")
