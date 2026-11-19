@@ -24,7 +24,7 @@ from . import agent as ag
 from .bc import train_bc
 from .config import EnvConfig
 from .demos import DemoConfig, ensure_demos, prefill_replay_buffer
-from .evaluate import flying_lap, make_probe_starts, probe
+from .evaluate import flying_lap, make_probe_starts, probe, reliability
 from .vec import DEFAULT_START_METHOD, build_vec_env, make_env
 
 
@@ -69,6 +69,12 @@ class TrainConfig:
     eval_interval: int = 50_000
     eval_stochastic_laps: int = 5
     eval_seed: int = 0
+    reliability_starts: int = 0              # > 0: after a clean deterministic flying lap, this many more from other start stations; a checkpoint that finishes them all is "gated", best_gated.zip = the fastest gated one
+    focus_prob: float = 0.0                  # > 0: this share of the training episodes starts 150-600 m before the places where training episodes ended in a failure (FocusCallback)
+    focus_bin_m: float = 25.0
+    focus_decay: float = 0.97                # forgetting of the failure counts, per focus_interval steps
+    focus_interval: int = 2000
+    focus_min_failures: float = 4.0          # no focus until this many (decayed) failures are on record
     checkpoint_interval: int = 100_000
     demo_dir: str = "data/demos"
     env: EnvConfig = field(default_factory=EnvConfig)
@@ -180,7 +186,9 @@ class EvalCallback(BaseCallback):
     def __init__(self, cfg, eval_envs, run):
         super().__init__()
         self.cfg, self.eval_envs, self.run = cfg, eval_envs, run          # eval_envs: {track name: DrivingEnv}
-        self.best = float("inf")
+        st = json.loads((run.out / "status.json").read_text()) if (run.out / "status.json").exists() else {}
+        self.best = float(st.get("best_score_lap2_over_qss") or float("inf"))                 # a resumed run keeps the best of its earlier sessions
+        self.best_gated = float(st.get("best_gated_score_lap2_over_qss") or float("inf"))
         self.next_eval = 0
         self.next_ckpt = cfg.checkpoint_interval
 
@@ -202,10 +210,17 @@ class EvalCallback(BaseCallback):
         sto = [flying_lap(self.model, self.eval_envs[names[k % len(names)]], deterministic=False, seed=self.cfg.eval_seed + k) for k in range(self.cfg.eval_stochastic_laps)]
         clean_sto = [r for r in sto if r.clean]
         score = float(np.mean([d.lap2_s / self.eval_envs[k].course.qss_lap_time_s for k, d in dets.items()])) if all(d.clean for d in dets.values()) else float("inf")   # lap 2 over the QSS ceiling, mean over tracks
+        rel = None
+        if self.cfg.reliability_starts > 0 and all(d.clean for d in dets.values()):          # only a checkpoint that finished its own test laps is worth the extra laps
+            rel = {k: reliability(self.model, e, self.cfg.reliability_starts, seed=self.cfg.eval_seed) for k, e in self.eval_envs.items()}
+        gated = rel is not None and all(r["of"] > 0 and r["clean"] == r["of"] for r in rel.values())
         rec = {"step": n, "hours": round(self.run.hours(), 4), "det_clean": det.clean, "det_end": det.termination, "det_lap1_s": det.lap_times_s[0] if det.lap_times_s else None,
                "det_lap2_s": det.lap2_s, "sto_clean": len(clean_sto), "sto_laps": len(sto), "sto_lap2_mean_s": float(np.mean([r.lap2_s for r in clean_sto])) if clean_sto else None,
                "tracks": {k: {"clean": d.clean, "lap2_s": d.lap2_s, "end": d.termination} for k, d in dets.items()}, "score": None if score == float("inf") else score,
                "alpha": self.model.alpha, "eval_wall_s": round(time.time() - t, 1)}
+        if rel is not None:
+            rec["reliability"] = {k: {"clean": r["clean"], "of": r["of"], "lap2_s": r["lap2_s"], "ends": r["ends"]} for k, r in rel.items()}
+            rec["gated"] = gated
         append_jsonl(self.run.out / "evals.jsonl", rec)
         (self.run.out / "laps").mkdir(exist_ok=True)
         for k, d in dets.items():
@@ -218,9 +233,54 @@ class EvalCallback(BaseCallback):
             self.best = score
             save_atomic(self.model, self.run.out / "checkpoints" / "best.zip")
             new = " NEW BEST"
-        self.run.status(state="running", step=n, best_score_lap2_over_qss=None if self.best == float("inf") else self.best)
+        if gated and score < self.best_gated:
+            self.best_gated = score
+            save_atomic(self.model, self.run.out / "checkpoints" / "best_gated.zip")
+            new += " NEW BEST GATED"
+        self.run.status(state="running", step=n, best_score_lap2_over_qss=None if self.best == float("inf") else self.best,
+                        best_gated_score_lap2_over_qss=None if self.best_gated == float("inf") else self.best_gated)
         per = ", ".join(f"{k} {d.lap2_s if d.clean else d.termination}" for k, d in dets.items())
-        print(f"  EVAL step {n}: det lap2 [{per}], stochastic clean {len(clean_sto)}/{len(sto)}, {rec['eval_wall_s']:.0f} s{new}", flush=True)
+        relx = "" if rel is None else ", other starts clean " + ", ".join(f"{r['clean']}/{r['of']}" for r in rel.values())
+        print(f"  EVAL step {n}: det lap2 [{per}], stochastic clean {len(clean_sto)}/{len(sto)}{relx}, {rec['eval_wall_s']:.0f} s{new}", flush=True)
+
+
+class FocusCallback(BaseCallback):
+    """Failure-focused training starts: counts where training episodes ended in a failure (off the track, wrong way) per bin of `focus_bin_m` around the lap, with exponential forgetting, and every
+    `focus_interval` steps tells the environments to start `focus_prob` of their episodes 150-600 m before those places (DrivingEnv.set_focus)."""
+
+    def __init__(self, cfg, length_m, run):
+        super().__init__()
+        self.cfg, self.run, self.length = cfg, run, float(length_m)
+        self.n_bins = max(int(round(self.length / cfg.focus_bin_m)), 1)
+        self.counts = np.zeros(self.n_bins)
+        self.next, self.active = 0, False
+
+    def weights(self):
+        """Smoothed failure density over +-2 bins around the lap, with a small floor; None while fewer than focus_min_failures are on record."""
+        total = float(self.counts.sum())
+        if total < self.cfg.focus_min_failures:
+            return None
+        padded = np.concatenate([self.counts[-2:], self.counts, self.counts[:2]])
+        return np.convolve(padded, np.ones(5) / 5.0, mode="valid") + 0.02 * total / self.n_bins
+
+    def _on_step(self):
+        for info in self.locals.get("infos", ()):
+            if info.get("termination") in ("off_track", "wrong_way") and "station_m" in info:
+                self.counts[int(float(info["station_m"]) / self.length * self.n_bins) % self.n_bins] += 1.0
+        n = self.model.num_timesteps
+        if n >= self.next:
+            self.next = n + self.cfg.focus_interval
+            self.counts *= self.cfg.focus_decay
+            w = self.weights()
+            if w is not None:
+                self.training_env.env_method("set_focus", w, self.cfg.focus_prob)
+                top = int(np.argmax(self.counts))                      # the log line names the bin with the most failures (the weights themselves are smoothed over +-2 bins)
+                self.logger.record("focus/failures_on_record", float(self.counts.sum()))
+                self.logger.record("focus/top_station_m", (top + 0.5) * self.length / self.n_bins)
+                if not self.active:
+                    self.active = True
+                    self.run.event("focus_on", step=n, top_station_m=round((top + 0.5) * self.length / self.n_bins), failures=round(float(self.counts.sum()), 1))
+        return True
 
 
 class BlendCallback(BaseCallback):
@@ -334,6 +394,8 @@ def run(cfg, resume=False, log=print):
            WallClock(cfg.max_hours, r)]
     if cfg.blend_steps > 0:
         cbs.append(BlendCallback(cfg, r))
+    if cfg.focus_prob > 0.0:
+        cbs.append(FocusCallback(cfg, next(iter(eval_envs.values())).course.L, r))
     try:
         model.learn(total_timesteps=max(cfg.total_steps - model.num_timesteps, 1), callback=CallbackList(cbs), reset_num_timesteps=False, log_interval=50)
     finally:

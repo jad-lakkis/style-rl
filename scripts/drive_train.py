@@ -30,6 +30,8 @@ def main():
     ap.add_argument("--envelope", default=None, help="the car's limits (json from scripts/measure_ocd_envelope.py); default: the car's")
     ap.add_argument("--pedal-full-at", type=float, default=None, help="the action at which a pedal is fully pressed (default 1.0 = the original mapping, run a1; 0.7 = full pedal for every action >= 0.7)")
     ap.add_argument("--ref-line", default=None, help="csv of the reference line (s_m, offset_m; tools/optimise_line.py) instead of the minimum-curvature line; the line the policy is pulled towards and the QSS speeds are computed on")
+    ap.add_argument("--reliability-starts", type=int, default=None, help="after a clean deterministic flying lap, this many more from other start stations; best_gated.zip = the fastest checkpoint that finished all of them")
+    ap.add_argument("--focus-prob", type=float, default=None, help="share of the training episodes that start 150-600 m before the places where training episodes ended in a failure (0 = off)")
     ap.add_argument("--train-inset-m", type=float, default=None, help="training only: the track counts this much narrower on both sides for the off-track test (a safety buffer); evaluation uses the true edges")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-envs", type=int, default=4)
@@ -69,6 +71,10 @@ def main():
                       blend_fraction=a.blend_fraction, env=env)
     if preset.train:
         cfg = replace(cfg, **preset.train)
+    if a.reliability_starts is not None:
+        cfg = replace(cfg, reliability_starts=a.reliability_starts)
+    if a.focus_prob is not None:
+        cfg = replace(cfg, focus_prob=a.focus_prob)
     if a.smoke:
         cfg = replace(cfg, total_steps=6000, demo=DemoConfig(n_transitions=4000, workers=1), bc_epochs=3, offline_blocks=2, offline_steps_per_block=200, online_warmup_steps=2000,
                       guard_interval=2000, guard_window=4000, guard_n_starts=3, guard_probe_s=10.0, eval_interval=3000, eval_stochastic_laps=1, checkpoint_interval=3000,

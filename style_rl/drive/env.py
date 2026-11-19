@@ -54,6 +54,7 @@ class DrivingEnv(gym.Env):
         self.action_space = spaces.Box(-1.0, 1.0, (3,), np.float32)
         self.demo = DemoDriver(course, cfg)
         self.teacher_w, self.teacher_f = 0.0, 0.85
+        self.focus_w, self.focus_p, self.focus_back_m = None, 0.0, (150.0, 600.0)      # failure-focused training starts, see set_focus
         ns = randomize.NOISE_STD                       # observation noise in the units of the scaled inputs (used only when a randomised episode asks for it)
         self._noise_ego = np.array([ns["speed"] / o.speed_scale_mps, ns["v_x"] / o.speed_scale_mps, ns["v_y"] / o.vy_scale_mps, ns["yaw_rate"] / o.yaw_rate_scale_radps,
                                     ns["a_x"] / o.accel_scale_mps2, ns["a_y"] / o.accel_scale_mps2, ns["steer_actual"] / o.steer_scale_rad, ns["slip"] * o.slip_gain, ns["slip"] * o.slip_gain])
@@ -72,6 +73,17 @@ class DrivingEnv(gym.Env):
         self.teacher_w = float(np.clip(teacher_weight, 0.0, 1.0))
         if fraction is not None:
             self.teacher_f = float(fraction)
+
+    def set_focus(self, weights, prob):
+        """Training starts: with probability `prob` an episode starts 150-600 m before a station drawn from `weights` (one weight per equal bin around the lap), so that the policy practises the
+        approach to the places where it fails. weights None or prob 0 = off (the start station is uniform on the lap, as before)."""
+        if weights is None:
+            self.focus_w, self.focus_p = None, 0.0
+            return
+        w = np.asarray(weights, float)
+        if w.ndim != 1 or (w < 0).any() or w.sum() <= 0.0:
+            raise ValueError("focus weights must be a non-negative vector with a positive sum")
+        self.focus_w, self.focus_p = w / w.sum(), float(np.clip(prob, 0.0, 1.0))
 
     def _pedal(self, a):
         return pedal_from_action(a, self.cfg)
@@ -140,7 +152,12 @@ class DrivingEnv(gym.Env):
         if self.evaluation:
             s0, f = (-cfg.eval_run_in_m) % c.L, cfg.eval_speed_fraction
         else:
-            s0, f = float(self.np_random.uniform(0.0, c.L)), float(self.np_random.uniform(*cfg.start_speed_fraction))
+            if self.focus_w is not None and self.focus_p > 0.0 and self.np_random.uniform() < self.focus_p:
+                b = int(self.np_random.choice(len(self.focus_w), p=self.focus_w))
+                s0 = (b + float(self.np_random.uniform())) * c.L / len(self.focus_w) - float(self.np_random.uniform(*self.focus_back_m))
+            else:
+                s0 = float(self.np_random.uniform(0.0, c.L))
+            f = float(self.np_random.uniform(*cfg.start_speed_fraction))
         s0 = float(options.get("start_s", s0)) % c.L
         if "start_speed" in options:
             return s0, f, float(options["start_speed"])

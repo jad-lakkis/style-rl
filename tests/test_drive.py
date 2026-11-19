@@ -541,3 +541,101 @@ def test_the_reference_line_can_come_from_a_file(tmp_path):
         Course(TRACK, ENVELOPE, line_csv=bad)
     env = make_env(from_file, replace(EnvConfig(), ref_line=str(csv)))
     assert env.cfg.ref_line == str(csv)
+
+
+# ---------------------------------------------------------------------------------------------------------------- failure-focused starts, reliability over start stations, the gated best
+class TeacherAsModel:
+    """The scripted driver behind the model interface (predict) that the evaluation functions use. NOT a trained model."""
+
+    def __init__(self, env, fraction=0.8, alpha=0.05):
+        self.env, self.fraction, self.alpha = env.unwrapped, fraction, alpha
+
+    def predict(self, obs, deterministic=True):
+        e = self.env
+        return e.demo.act(e.state, e.s, e.demo.lap_target(e.s, self.fraction, e.state["speed"])), None
+
+    def save(self, path):
+        open(path, "wb").write(b"model")
+
+    def save_replay_buffer(self, path):
+        open(path, "wb").write(b"buffer")
+
+
+def test_focus_starts_come_before_the_failure_places(course):
+    env = make_env(course)
+    env.reset(seed=1)
+    bins = 100
+    w = np.zeros(bins)
+    w[int(2050.0 / course.L * bins)] = 1.0                                   # all the weight on the bin around station 2050 m
+    env.set_focus(w, 1.0)
+    L, width = course.L, course.L / bins
+    for _ in range(40):
+        s0, f, v0 = env._sample_start({})
+        assert 2050.0 - width - 600.0 - 1e-6 <= s0 <= 2050.0 + width - 150.0 + 1e-6
+        assert 0.3 <= f <= 0.7
+    env.set_focus(w, 0.0)                                                    # probability 0: back to uniform starts
+    starts = [env._sample_start({})[0] for _ in range(60)]
+    assert max(starts) - min(starts) > 0.5 * L
+    env.set_focus(None, 1.0)
+    assert env.focus_w is None
+    with pytest.raises(ValueError):
+        env.set_focus(np.zeros(5), 0.5)
+
+
+def test_focus_starts_leave_the_random_stream_alone_when_off(course):
+    a, b = make_env(course), make_env(course)
+    a.reset(seed=5)
+    b.reset(seed=5)
+    assert [a._sample_start({})[0] for _ in range(5)] == [b._sample_start({})[0] for _ in range(5)]
+
+
+def test_focus_callback_counts_failures_and_gives_weights(course):
+    from style_rl.drive.train import FocusCallback, TrainConfig
+    cfg = replace(TrainConfig(), focus_prob=0.3, focus_min_failures=2.0)
+    cb = FocusCallback(cfg, course.L, run=None)
+    assert cb.weights() is None
+    infos = [{"termination": "off_track", "station_m": 2060.0}, {"termination": "off_track", "station_m": 2070.0}, {"termination": "wrong_way", "station_m": 2065.0},
+             {"termination": None, "station_m": 100.0}, {"termination": "nonfinite", "station_m": 900.0}]
+    cb.locals = {"infos": infos}
+    cb.model = type("M", (), {"num_timesteps": 10**9})()                     # past `next`, so the weights are computed (training_env is only called when there are weights)
+    sent = {}
+    cb.__class__.training_env = property(lambda self: type("V", (), {"env_method": lambda _s, name, w, p: sent.update(name=name, w=np.asarray(w), p=p)})())
+    cb.__class__.logger = property(lambda self: type("Lg", (), {"record": lambda *_a, **_k: None})())
+    cb.run = type("R", (), {"event": lambda *_a, **_k: None})()
+    try:
+        cb._on_step()
+    finally:
+        del cb.__class__.training_env, cb.__class__.logger
+    assert cb.counts.sum() == pytest.approx(3.0 * cfg.focus_decay)           # three failures counted (the other two ended otherwise), then forgotten a little
+    assert sent["name"] == "set_focus" and sent["p"] == 0.3
+    centre_station = (np.average(np.arange(len(sent["w"])), weights=sent["w"]) + 0.5) * course.L / len(sent["w"])
+    assert abs(centre_station - 2065.0) < 30.0                                  # the weight is centred on the three failures, smoothed over a few bins
+
+
+def test_reliability_runs_laps_from_other_stations(course):
+    from style_rl.drive.evaluate import reliability, varied_starts
+    assert varied_starts(1000.0, 4) == [125.0, 375.0, 625.0, 875.0]
+    env = make_env(course, evaluation=True)
+    out = reliability(TeacherAsModel(env), env, 2)
+    assert out["of"] == 2 and out["clean"] == 2 and len(out["lap2_s"]) == 2 and out["ends"] == ["lap_complete"] * 2
+    assert all(100.0 < t < 200.0 for t in out["lap2_s"])
+
+
+def test_the_eval_callback_saves_the_best_gated_checkpoint(course, tmp_path):
+    import json
+    from style_rl.drive.train import EvalCallback, Run, TrainConfig
+    run = Run(tmp_path)
+    (tmp_path / "checkpoints").mkdir()
+    cfg = replace(TrainConfig(), reliability_starts=2, eval_stochastic_laps=1)
+    env = make_env(course, evaluation=True)
+    cb = EvalCallback(cfg, {course.name: env}, run)
+    cb.model = TeacherAsModel(env)
+    cb.evaluate(1000)
+    rec = json.loads((tmp_path / "evals.jsonl").read_text().splitlines()[-1])
+    assert rec["det_clean"] and rec["gated"] is True and rec["reliability"][course.name]["clean"] == 2
+    assert (tmp_path / "checkpoints" / "best_gated.zip").exists() and (tmp_path / "checkpoints" / "best.zip").exists()
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert st["best_gated_score_lap2_over_qss"] == pytest.approx(st["best_score_lap2_over_qss"]) and st["best_gated_score_lap2_over_qss"] > 1.0
+    # a resumed run keeps what the earlier sessions reached
+    again = EvalCallback(cfg, {course.name: env}, run)
+    assert again.best == pytest.approx(st["best_score_lap2_over_qss"]) and again.best_gated == pytest.approx(st["best_gated_score_lap2_over_qss"])

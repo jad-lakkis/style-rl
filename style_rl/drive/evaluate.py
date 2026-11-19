@@ -19,12 +19,18 @@ class LapReport:
         return self.lap_times_s[1] if len(self.lap_times_s) >= 2 else None
 
 
-def flying_lap(model, env, *, deterministic, seed=0, trace=False):
-    """One evaluation episode (evaluation mode: run-in, then eval_laps timed laps; lap 2 is the flying lap)."""
+def flying_lap(model, env, *, deterministic, seed=0, trace=False, start_s=None, start_speed=None):
+    """One evaluation episode (evaluation mode: run-in, then eval_laps timed laps; lap 2 is the flying lap). start_s / start_speed: another start station (m) and speed (m/s) than the standard
+    run-in 200 m before the line (the car then drives on to the line, and the two timed laps follow)."""
     e = env.unwrapped
     if not deterministic:
         th.manual_seed(int(seed))
-    obs, _ = env.reset(seed=int(seed), options={"evaluation": True})
+    options = {"evaluation": True}
+    if start_s is not None:
+        options["start_s"] = float(start_s)
+    if start_speed is not None:
+        options["start_speed"] = float(start_speed)
+    obs, _ = env.reset(seed=int(seed), options=options)
     rec = {k: [] for k in ("station_m", "x", "y", "speed", "e", "steer", "throttle", "brake", "time_s")} if trace else {}
     n = 0
     while True:
@@ -40,6 +46,30 @@ def flying_lap(model, env, *, deterministic, seed=0, trace=False):
     times = list(info.get("lap_times_s", []))
     clean = info["termination"] == "lap_complete" and len(times) == e.cfg.eval_laps
     return LapReport(clean, times, str(info["termination"]), str(info["truncation"]), n, {k: np.asarray(v) for k, v in rec.items()})
+
+
+def varied_starts(length_m, n, offset_fraction=0.5):
+    """n start stations spread evenly around the lap, the first at `offset_fraction` of a spacing (never at the line itself, which the standard evaluation start is near)."""
+    return [((k + offset_fraction) * length_m / n) % length_m for k in range(n)]
+
+
+def reliability(model, env, n_starts, seed=0):
+    """Deterministic flying laps (two timed laps each) from n_starts different stations around the lap. A start whose settle phase leaves the track by the scripted driver's fault is skipped.
+    Returns {"of": starts used, "clean": clean ones, "lap2_s": [lap 2 of the clean ones], "ends": [how each ended], "starts_m": [...]}."""
+    e = env.unwrapped
+    out = {"of": 0, "clean": 0, "lap2_s": [], "ends": [], "starts_m": []}
+    for k, s0 in enumerate(varied_starts(float(e.course.L), n_starts)):
+        try:
+            rep = flying_lap(model, env, deterministic=True, seed=int(seed) + 100 + k, start_s=s0)
+        except RuntimeError:
+            continue
+        out["of"] += 1
+        out["starts_m"].append(round(s0, 1))
+        out["ends"].append(rep.termination)
+        if rep.clean:
+            out["clean"] += 1
+            out["lap2_s"].append(rep.lap2_s)
+    return out
 
 
 def make_probe_starts(env, n_starts=8, offset_m=37.0, shift_m=50.0, max_shifts=10, seed_base=1000):
