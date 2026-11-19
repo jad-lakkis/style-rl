@@ -29,8 +29,8 @@ input[type=range]{vertical-align:middle}
 .hint{color:#666;font-size:12px}
 .neg{color:#0a6b3d}.pos{color:#a33}
 </style></head><body>
-<header><h1>Lap replay</h1>
-<label>Driver <select id="drv"></select></label>
+<header><h1 id="h1">Lap replay</h1>
+<label id="drvlab">Driver <select id="drv"></select></label>
 <label>View <select id="view"><option value="chase">3D chase camera</option><option value="2d">2D map</option></select></label>
 <label id="camlab">Camera behind <select id="cam"></select></label>
 <label id="modelab">Cars placed <select id="mode"><option value="place">at the same place on the track</option><option value="moment">at the same moment (live race)</option></select></label>
@@ -39,6 +39,7 @@ input[type=range]{vertical-align:middle}
 <label>Speed <select id="rate"><option value="0.1">0.1x</option><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select></label>
 <label><input type="checkbox" id="trail" checked> racing lines</label>
 </header>
+<div id="about" class="note" style="padding:6px 16px 0 16px;display:none"></div>
 <main>
 <div class="left">
 <canvas id="map" width="840" height="560"></canvas>
@@ -50,9 +51,9 @@ input[type=range]{vertical-align:middle}
 </div>
 <div class="panel">
 <table id="tab"></table>
-<h3>The coaching brief (what the LLM would be given)</h3>
+<div id="briefbox"><h3>The coaching brief (what the LLM would be given)</h3>
 <div class="btns"><button id="copyb">Copy the brief</button><button id="copyp">Copy the whole prompt</button><span class="hint" id="copied"></span></div>
-<div id="brief"></div>
+<div id="brief"></div></div>
 <h3>Sectors: time of each lap (click a row to zoom in; the laps then start together at the sector entry)</h3>
 <table id="sectab"></table>
 <h3>The 12 style numbers of each lap, as they are (each in its own unit)</h3>
@@ -65,15 +66,19 @@ All laps are the same car on the same track in the simulator, started on the lin
 <script>
 const DATA = __DATA__, T = DATA.track;
 const COL = {driver:"#555555", keep:"#0072B2"};
-const NAME = {driver:"driver's run", keep:"RL lap, style kept"};
-const SHORT = {driver:"driver's run", keep:"style kept"};
+const NAME = Object.assign({driver:"driver's run", keep:"RL lap, style kept"}, DATA.names || {});
+const SHORT = Object.assign({driver:"driver's run", keep:"style kept"}, DATA.short || {});
+if (DATA.title){ document.title = DATA.title; document.getElementById("h1").textContent = DATA.title; }
+if (DATA.nobrief) document.getElementById("briefbox").style.display = "none";
+if (DATA.about){ const e = document.getElementById("about"); e.textContent = DATA.about; e.style.display = ""; }
+if (DATA.drvlabel) document.getElementById("drvlab").firstChild.textContent = DATA.drvlabel + " ";
 const ORDER = ["driver","keep"];
 const $ = id => document.getElementById(id);
 const cv = $("map"), ctx = cv.getContext("2d"), tr = $("trace"), tctx = tr.getContext("2d"), df = $("diff"), dctx = df.getContext("2d"), gc = $("gapc"), gctx = gc.getContext("2d");
 let D, sec = null, on = {driver:true, keep:true}, t = 0, playing = false, last = null;
 const V = {cx:0, cy:0, ext:1000, zoom:1};                   // 2D view
 const CAM = {phi:0, back:13, height:4.0};                    // chase camera: orbit angle, distance behind, height
-Object.keys(DATA.drivers).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = k; $("drv").appendChild(o); });
+Object.keys(DATA.drivers).forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = (DATA.labels && DATA.labels[k]) || k; $("drv").appendChild(o); });
 ORDER.forEach(k => { const o = document.createElement("option"); o.value = k; o.textContent = NAME[k]; $("cam").appendChild(o); });
 
 // ---- lookups on a lap (arrays on a 0.1 s grid)
