@@ -74,6 +74,9 @@ def make_powertrain(base, pt, turbo="ac"):
             return float(np.interp(rpm, kers[:, 0], kers[:, 1]))
 
         def update_gear(self, axle_omega_radps, dt_s=0.0):
+            if dt_s == 0.0 and self.gear == 0:                              # the backend's first call after a reset: start in the gear the speed asks for, not in first gear above the rev limiter
+                while self.gear < len(self.ratios) - 1 and self.rpm(axle_omega_radps) > self.shift_up:
+                    self.gear += 1
             self.since_shift_s += dt_s
             rpm = self.rpm(axle_omega_radps)
             self._advance_boost(rpm, dt_s)

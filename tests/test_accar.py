@@ -566,3 +566,12 @@ def test_ocd_tyre_signs_cornering_stiffness_negative_longitudinal_positive():
     c = axle_coefficients(dy_ref=1.86, dx_ref=1.87, fz0=3794.0, ls_y=0.78, ls_x=0.92, fz_range=(1900.0, 8300.0), cf_y=18.0, cf_x=22.0, shape_y=(1.27, -1.8), shape_x=(1.2, -0.5))
     assert c["PKY1"] < 0 and c["PKX1"] > 0 and c["PKY2"] > 0 and c["PDY1"] > 0 and c["PDX1"] > 0
     assert -c["PKY1"] * 3794.0 * math.sin(2 * math.atan(1.0 / c["PKY2"])) == pytest.approx(18.0 * 1.86 * 3794.0, rel=1e-9)
+
+
+def test_a_reset_at_speed_starts_in_the_right_gear():
+    pt = make_pt("steady")
+    pt.update_gear(omega_for(11000, pt.ratios[2]) , 0.0)             # first call after a reset, at the wheel speed of 11000 rpm in the third gear
+    assert pt.gear == 2
+    fast = make_pt("steady")
+    fast.update_gear(omega_for(30000, fast.ratios[0]), 0.0)          # far above the limit in first gear: ends in the top gear
+    assert fast.gear == 2
