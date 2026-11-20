@@ -17,7 +17,6 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from style_rl.style_env import make_backend  # noqa: E402
 
 G = 9.81
 DT = 0.04
@@ -95,6 +94,7 @@ def main():
         from style_rl.drive.backend import make_backend as make_drive_backend
         env = DriveBackendAsEnv(make_drive_backend(args.backend, None, 0.30, DT))
     else:
+        from style_rl.style_env import make_backend
         env = make_backend(args.backend)
     acc = np.array([accel(env, v) for v in SPEEDS])
     brk = np.array([brake(env, v) for v in SPEEDS])

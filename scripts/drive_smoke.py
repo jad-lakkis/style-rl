@@ -10,6 +10,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from style_rl.drive.backend import make_backend  # noqa: E402
+from style_rl.drive.cars import PRESETS, apply_preset  # noqa: E402
 from style_rl.drive.config import OBS_DIM, EnvConfig  # noqa: E402
 from style_rl.drive.course import Course  # noqa: E402
 from style_rl.drive.env import DrivingEnv  # noqa: E402
@@ -30,18 +31,21 @@ def play(env, fraction, options=None, seed=0, max_steps=100000):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--backend", default="mock")
+    ap.add_argument("--car", default="f317", choices=sorted(PRESETS), help="car preset: its wheelbase, wheel positions, traction control and brake cap for the scripted driver, and its limits file")
+    ap.add_argument("--backend", default="mock", help="mock, ocd, or ocdlap:<car> (the backend of the car preset is NOT chosen for you: say it)")
+    ap.add_argument("--envelope", default=None, help="limits json (default: the car preset's)")
     ap.add_argument("--track", default=str(ROOT / "data/tracks/monza_geometry.csv"))
     ap.add_argument("--fraction", type=float, default=0.9, help="the scripted driver aims at this fraction of the QSS ceiling")
     ap.add_argument("--episodes", type=int, default=6)
     a = ap.parse_args()
 
     t0 = time.time()
-    cfg = EnvConfig()
-    course = Course(a.track, ROOT / "data/ocd_envelope.json", margin_m=cfg.margin_m)
+    cfg = apply_preset(a.car, EnvConfig())
+    course = Course(a.track, a.envelope or ROOT / PRESETS[a.car].envelope, margin_m=cfg.margin_m)
     print(f"course {course.name}: {course.L:.1f} m, {len(course.corners)} corners, QSS ceiling {course.qss_lap_time_s:.2f} s, built in {time.time() - t0:.1f} s")
     backend = make_backend(a.backend, a.track, cfg.steer_lock_rad, cfg.dt_s)
     env = DrivingEnv(course, backend, cfg)
+    print(f"car {a.car}, backend {a.backend}, wheelbase {cfg.wheelbase_m} m, brake cap {cfg.demo_brake_cap}, traction control {cfg.tc_start}/{cfg.tc_span}")
     obs, info = env.reset(seed=1)
     assert obs.shape == (OBS_DIM,) and obs.dtype == np.float32, obs.shape
     print(f"observation {obs.shape}, clipped values {int(np.sum(np.abs(obs) >= cfg.obs.clip))}, start {info['start']}")
