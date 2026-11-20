@@ -6,6 +6,7 @@ traction control, the wheel positions of the off-track test, how fast the demons
                 (data/f1/ocd_envelope_sf70h_f1.json) is measured with  scripts/measure_ocd_envelope.py --backend ocdlap:sf70h_f1 --vmax 95  and is NOT in git.
     His own F1 runs used demonstrations at 0.5-0.8 of the QSS speed (0.35-0.65 gave a copy that stalled in the first corners) and a traction control that starts at slip 0.06.
 """
+import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -30,6 +31,11 @@ PRESETS = {
     "sf70h_f1": CarPreset("sf70h_f1", "ocdlap:sf70h_f1:p1_TUM_f1", "data/f1/ocd_envelope_sf70h_f1.json",
                           dict(wheel_half_base_m=1.8, wheel_half_track_m=0.8, wheelbase_m=3.6, tc_start=0.06, tc_span=0.03, demo_brake_cap=0.3), (0.5, 0.8),
                           "SF70H-like F1 car, wheelbase 3.6 m, ERS off", dict(gate_required=False)),
+    # the Assetto Corsa Ferrari SF70H rebuilt in OCD from its data files (style_rl.accar, scripts/ac_car_to_ocd.py): wheelbase 3.58 m, steering lock 18 degrees at the wheels; its numbers are NOT in this
+    # repository (data/ac_sf70h/ is ignored by git)
+    "ac_sf70h": CarPreset("ac_sf70h", "ocdlap:ac_sf70h", "data/ac_sf70h/ocd_envelope.json",
+                          dict(steer_lock_rad=math.radians(18.0), wheel_half_base_m=1.79, wheel_half_track_m=0.80, wheelbase_m=3.58, tc_start=0.07, tc_span=0.04, demo_brake_cap=0.3), (0.5, 0.8),
+                          "Assetto Corsa Ferrari SF70H in OCD", dict(gate_required=False)),
 }
 
 

@@ -108,11 +108,14 @@ class OCDBackend:
 
 class OcdLapBackend:
     """The F1 cars of Ibrahim Khaled's `ocd_lap` package (his private repository `ocd_first_lap`, branch sf70h-f1; we only READ it): his patched Open-Car-Dynamics build (`ocd_native`), the
-    SF70H-like car, the F1 engine with its automatic gearbox (python, at the 2 ms physics rate) and his default setup of that car (heave elements on, brake bias 0.58). The electric motor is off.
+    F1 engine with its automatic gearbox (python, at the 2 ms physics rate) and a setup of the car. The electric motor is off unless asked for.
 
     Where it is found: the folder named by the environment variable OCD_FIRST_LAP_DIR (or `repo`), a BUILD COPY of the repository: ocd_lap/, the built ocd_native module and
-    vendor/Open-Car-Dynamics (the pinned commit with his patches); see runpod/setup_ocdlap.sh. None of his files are in this repository. Name: "ocdlap", "ocdlap:<car>" or
-    "ocdlap:<car>:<setup>" (cars sf70h_f1, sf70h_tum; setups default, p1_TUM_f1).
+    vendor/Open-Car-Dynamics (the pinned commit with his patches); see runpod/setup_ocdlap.sh. None of his files are in this repository.
+    Name: "ocdlap", "ocdlap:<car>", "ocdlap:<car>:<setup>" or with options "ocdlap:ac_sf70h?turbo=ac&ers=0".
+      cars  sf70h_f1, sf70h_tum   his own (setups default, p1_TUM_f1)
+            ac_sf70h              the Assetto Corsa Ferrari SF70H rebuilt from its data files (style_rl.accar): needs the replica json written by scripts/ac_car_to_ocd.py
+                                  (path in AC_REPLICA_JSON, default data/ac_sf70h/replica.json); options turbo = ac | steady | linear (see accar/powertrain.py), ers = 0 | 1
     One decision = control_dt / 2 ms physics steps with the pedals held. No domain randomisation.
 
     Setup p1_TUM_f1 = the setup of his F1 runs (rlsetup/driving/setups.py of his public RL repository): the car's own default setup (heave springs on, brake bias 0.58) with the p1_TUM knobs
@@ -122,7 +125,7 @@ class OcdLapBackend:
 
     SETUPS = {"default": {}, "p1_TUM_f1": {"roll_stiffness_front_share": 0.4533, "aero_front_share": 0.4508, "lsd_lock_drive": 1.0, "heave_damping_ratio": 0.3}}
 
-    def __init__(self, track_csv, steer_lock_rad=0.30, dt=0.04, car="sf70h_f1", ers=False, repo=None, setup="p1_TUM_f1"):
+    def __init__(self, track_csv, steer_lock_rad=0.30, dt=0.04, car="sf70h_f1", ers=False, repo=None, setup="p1_TUM_f1", options=None):
         import os
         import sys
         from pathlib import Path
@@ -134,16 +137,26 @@ class OcdLapBackend:
         from ocd_lap import cars
         from ocd_lap.backend import DT, Inputs, OCDBackend, StartPose
         self._inputs, self._pose = Inputs, StartPose
-        self.car, self.spec = car, cars.get(car)
+        opts = dict(options or {})
+        self.car = car
+        if car == "ac_sf70h":
+            import json
+            from style_rl.accar.ocdlap_glue import build
+            path = opts.get("replica") or os.environ.get("AC_REPLICA_JSON") or str(Path(__file__).resolve().parents[2] / "data/ac_sf70h/replica.json")
+            replica = json.loads(Path(path).read_text())
+            self.backend, self.setup, self.spec = build(replica, turbo=opts.get("turbo", "ac"), ers=str(opts.get("ers", int(bool(ers)))).lower() in ("1", "true", "yes"))
+            self.setup_name = "ac_default"
+        else:
+            self.spec = cars.get(car)
+            if setup not in self.SETUPS:
+                raise ValueError(f"unknown setup {setup!r}; choose from {sorted(self.SETUPS)}")
+            self.setup_name = setup
+            self.setup = cars.default_setup(car)
+            if self.SETUPS[setup]:
+                self.setup = self.setup.replace(**self.SETUPS[setup])
+            self.backend = OCDBackend(powertrain="engine", car=car, ers=ers)
         if steer_lock_rad > self.spec.steer_max_rad + 1e-9:
             raise ValueError(f"steering lock {steer_lock_rad} rad is above the car's actuator limit {self.spec.steer_max_rad} rad")
-        if setup not in self.SETUPS:
-            raise ValueError(f"unknown setup {setup!r}; choose from {sorted(self.SETUPS)}")
-        self.setup_name = setup
-        self.setup = cars.default_setup(car)
-        if self.SETUPS[setup]:
-            self.setup = self.setup.replace(**self.SETUPS[setup])
-        self.backend = OCDBackend(powertrain="engine", car=car, ers=ers)
         self.steer_lock = float(steer_lock_rad)
         self.control_dt = float(dt)
         self.n_sub = int(round(dt / DT))
@@ -178,6 +191,8 @@ def make_backend(name, track_csv, steer_lock_rad=0.30, dt=0.04):
     if name == "mock":
         return MockBackend(track_csv, steer_lock_rad, dt)
     if name == "ocdlap" or name.startswith("ocdlap:"):
-        parts = name.split(":")
-        return OcdLapBackend(track_csv, steer_lock_rad, dt, car=parts[1] if len(parts) > 1 else "sf70h_f1", setup=parts[2] if len(parts) > 2 else "p1_TUM_f1")
+        head, _, query = name.partition("?")
+        parts = head.split(":")
+        options = dict(kv.split("=", 1) for kv in query.split("&") if "=" in kv)
+        return OcdLapBackend(track_csv, steer_lock_rad, dt, car=parts[1] if len(parts) > 1 else "sf70h_f1", setup=parts[2] if len(parts) > 2 else "p1_TUM_f1", options=options)
     raise ValueError(f"unknown backend {name!r}")
