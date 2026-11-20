@@ -59,7 +59,7 @@ def fit_shape(curve, slope0=None, s_max=0.6):
 
 
 def axle_coefficients(*, dy_ref, dx_ref, fz0, ls_y, ls_x, fz_range, cf_y, cf_x, shape_y, shape_x):
-    """The MF5.2 coefficients (name -> value) of the tyres of one axle. shape_* = (C, E). Zero-slip side-force offsets and the slip-ratio side force are set to 0 as in AC (the mirrored MF5.2
+    """The MF5.2 coefficients (name -> value) of the tyres of one axle. shape_* = (C, E). PKY1 is NEGATIVE, as in OCD's own tyre (ISO axes: the cornering stiffness is negative there). Zero-slip side-force offsets and the slip-ratio side force are set to 0 as in AC (the mirrored MF5.2
     offsets make load transfer raise an axle's side force at small slip, which AC's tyre does not do)."""
     pdy1, pdy2 = fit_peak_friction(dy_ref, fz0, ls_y, fz_range)
     pdx1, pdx2 = fit_peak_friction(dx_ref, fz0, ls_x, fz_range)
@@ -68,7 +68,7 @@ def axle_coefficients(*, dy_ref, dx_ref, fz0, ls_y, ls_x, fz_range, cf_y, cf_x, 
     kx_over_fz = cf_x * float(ac_mu(fz0, dx_ref, fz0, ls_x))
     params = {"FNOMIN": fz0, "LFZO": 1.0, "LMUX": 1.0, "LMUY": 1.0,
               "PDY1": pdy1, "PDY2": pdy2, "PDX1": pdx1, "PDX2": pdx2,
-              "PKY1": pky1, "PKY2": pky2, "PKY4": 2.0, "PCY1": shape_y[0], "PEY1": shape_y[1],
+              "PKY1": -pky1, "PKY2": pky2, "PKY4": 2.0, "PCY1": shape_y[0], "PEY1": shape_y[1],
               "PKX1": kx_over_fz, "PKX2": 0.0, "PKX3": 0.0, "PCX1": shape_x[0], "PEX1": shape_x[1]}
     for k in ("PEY2", "PEY3", "PEY4", "PEY5", "PEX2", "PEX3", "PEX4", "PHY1", "PHY2", "PVY1", "PVY2", "RVY1", "RVY2"):
         params[k] = 0.0
