@@ -32,6 +32,8 @@ if [ "$(git branch --show-current)" != "ocd-first-lap" ] || [ "$(git rev-list --
 fi
 git submodule update --init --recursive
 cd "$ROOT"
+# the CMakeLists globs vendor/Open-Car-Dynamics/lib/* as include directories; GCC (unlike clang on his Mac) stops at the one file in it, lib/Readme.md
+find "$ROOT/vendor/Open-Car-Dynamics/lib" -maxdepth 1 -type f -delete
 
 if [ ! -f "$ROOT"/ocd_native*.so ]; then
   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPython_EXECUTABLE="$(command -v python3)" -Dpybind11_DIR="$(python3 -m pybind11 --cmakedir)"
