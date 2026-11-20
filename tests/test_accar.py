@@ -588,3 +588,204 @@ def test_the_scripted_driver_inverts_the_turbo_pedal_curve():
         p = ac.pedal_for_torque(u)
         assert p * (1 + 3.4 * p ** 5.75) / 4.4 == pytest.approx(u, abs=2e-3)       # the torque fraction the pedal gives
     assert ac.pedal_for_torque(0.5) > 0.5 and ac.pedal_for_torque(1.0) == pytest.approx(1.0)       # a half torque needs more than a half pedal
+
+
+# ------------------------------------------------------------------------------------------------------------ aero: AC's wing model, the curve identification, the fit to OCD's polynomial
+from style_rl.accar.aero import FRONT_TERMS, REAR_TERMS, AcAero, Geometry, ocd_lift  # noqa: E402
+from style_rl.accar.aero_curves import AeroCurveError, find_aero_curves  # noqa: E402
+
+WING_AERO = """[HEADER]
+VERSION=3
+[WING_0]
+NAME=BODY
+CHORD=1
+SPAN=1.5
+POSITION=0,0.15,-0.08
+LUT_AOA_CL=body_cl.lut
+LUT_GH_CL=
+CL_GAIN=0
+LUT_AOA_CD=body_cd.lut
+LUT_GH_CD=
+CD_GAIN=1
+ANGLE=2
+[WING_1]
+NAME=FRONT
+CHORD=1
+SPAN=1.0
+POSITION=0,-0.17,2.6
+LUT_AOA_CL=front_cl.lut
+LUT_GH_CL=front_gh.lut
+CL_GAIN=1.0
+LUT_AOA_CD=front_cd.lut
+LUT_GH_CD=
+CD_GAIN=1.0
+ANGLE=10
+[WING_2]
+NAME=REAR
+CHORD=1
+SPAN=1.5
+POSITION=0,0.55,-1.6
+LUT_AOA_CL=rear_cl.lut
+LUT_GH_CL=
+CL_GAIN=1.0
+LUT_AOA_CD=rear_cd.lut
+LUT_GH_CD=
+CD_GAIN=1.0
+ANGLE=12
+[DYNAMIC_CONTROLLER_0]
+WING=2
+COMBINATOR=MULT
+INPUT=SPEED_KMH
+LUT=rear_speed.lut
+FILTER=0.8
+UP_LIMIT=30
+DOWN_LIMIT=0
+[DYNAMIC_CONTROLLER_1]
+WING=2
+COMBINATOR=ADD
+INPUT=GAS
+LUT=rear_gas.lut
+FILTER=0.8
+UP_LIMIT=9
+DOWN_LIMIT=0
+"""
+WING_LUTS = {"body_cl.lut": "-10|0\n10|0\n", "body_cd.lut": "-10|0.5\n10|0.5\n", "front_cl.lut": "-10|-1.0\n0|0\n20|2.0\n", "front_cd.lut": "-10|0.1\n20|0.1\n", "front_gh.lut": "0|0.5\n0.2|1.5\n",
+             "rear_cl.lut": "-10|-1\n20|2\n", "rear_cd.lut": "-10|0.2\n30|0.2\n", "rear_speed.lut": "0|1\n300|0.5\n", "rear_gas.lut": "0|0\n1|4\n"}
+
+
+def wing_folder(path):
+    write_folder(path)
+    (path / "aero.ini").write_text(WING_AERO)
+    for n, t in WING_LUTS.items():
+        (path / n).write_text(t)
+    return path
+
+
+def wing_model(tmp_path):
+    car = AcCar(wing_folder(tmp_path / "wings"))
+    curves, notes = find_aero_curves(car)
+    return car, AcAero.from_car(car, curves, Geometry(wheelbase=3.5, lf=1.925, cg_height=0.26, static_ride=(0.045, 0.090), rho=1.2)), notes
+
+
+def test_wing_law_by_hand(tmp_path):
+    """lift = 0.5 rho v^2 chord span CL(angle + pitch) gain height multiplier, the controllers in file order, lifts moved to the axles by moment balance about the CG (numbers worked out here by hand)"""
+    car, aero, notes = wing_model(tmp_path)
+    assert not car.scrambled and all(n["rule"] == "by name" for n in notes)
+    r = aero.evaluate(150.0, 0.045, 0.090, gas=0.5)
+    pitch = math.atan2(0.045, 3.5)
+    aoa = math.degrees(pitch)
+    h_front = 0.26 - 0.17 * math.cos(pitch) - 2.6 * math.sin(pitch)
+    front_cl = 0.1 * (10 + aoa) * (0.5 + 5.0 * h_front)                                # CL = 0.1 per degree, times the height multiplier 0.5 + 5 h of the front wing
+    angle_rear = min(max(12 * (1 - 0.5 * 150 / 300) + 4 * 0.5, 0), 9)                  # the speed MULT first (12 -> 9), then the gas ADD (+2 = 11), held at 9 by the UP_LIMIT of the second controller
+    rear_cl = 0.1 * (angle_rear + aoa)
+    front_axle = front_cl * 1.0 * (2.6 + 1.575) / 3.5 + rear_cl * 1.5 * (-1.6 + 1.575) / 3.5
+    rear_axle = front_cl * 1.0 * (1 - (2.6 + 1.575) / 3.5) + rear_cl * 1.5 * (1 - (-1.6 + 1.575) / 3.5)
+    assert r["front"] == pytest.approx(front_axle, rel=1e-9) and r["rear"] == pytest.approx(rear_axle, rel=1e-9)
+    assert r["cxa"] == pytest.approx(0.5 * 1.5 + 0.1 * 1.0 + 0.2 * 1.5, rel=1e-9)
+    assert r["front"] + r["rear"] == pytest.approx(front_cl + rear_cl * 1.5, rel=1e-9)         # the axles carry all of the lift
+    q = 0.5 * 1.2 * (150 / 3.6) ** 2
+    assert r["downforce_N"] == pytest.approx(q * (front_cl + rear_cl * 1.5), rel=1e-9)
+
+
+def test_body_pitch_steepens_the_wings_and_the_controller_limits_clamp(tmp_path):
+    _, aero, _ = wing_model(tmp_path)
+    flat = aero.evaluate(100.0, 0.060, 0.060, gas=0.0)                                 # no rake: no pitch
+    raked = aero.evaluate(100.0, 0.030, 0.100, gas=0.0)
+    assert flat["aoa_deg"] == pytest.approx(0.0) and raked["aoa_deg"] > 1.0
+    nopitch = aero.evaluate(100.0, 0.030, 0.100, gas=0.0, pitch_aoa=False)
+    assert nopitch["aoa_deg"] == 0.0 and nopitch["front"] + nopitch["rear"] < raked["front"] + raked["rear"]       # nose down: every wing meets the air at a larger angle
+    full = aero.evaluate(100.0, 0.060, 0.060, gas=1.0)                                 # the gas controller adds 4 degrees but its UP_LIMIT 9 holds the rear wing at 9 (12 x 0.83 + 4 = 14 -> 9)
+    rear = [x for x in full["rows"] if x["wing"] == "REAR"][0]
+    assert rear["angle_deg"] == pytest.approx(9.0)
+    drs = aero.evaluate(100.0, 0.060, 0.060, gas=1.0, angle_mult={2: 0.0})            # EFFECT 0: the setup angle is removed from the table index (the pitch stays)
+    assert [x for x in drs["rows"] if x["wing"] == "REAR"][0]["index_deg"] == pytest.approx(0.0)
+
+
+def test_ground_height_multiplier_acts_on_the_front_wing(tmp_path):
+    _, aero, _ = wing_model(tmp_path)
+    high = aero.evaluate(100.0, 0.100, 0.100)                                          # the front wing high above the road
+    low = aero.evaluate(100.0, 0.010, 0.010)                                           # the whole car near the road: the multiplier 0.5 + 5 h of the front wing falls
+    row = lambda r: [x for x in r["rows"] if x["wing"] == "FRONT"][0]
+    assert row(high)["height_mm"] > 100 and row(low)["height_mm"] < 40 and row(low)["cza"] < 0.7 * row(high)["cza"]
+
+
+def test_fit_to_ocds_polynomial_follows_the_wing_model(tmp_path):
+    _, aero, _ = wing_model(tmp_path)
+    fit = aero.fit_ocd(v_kmh=200.0, rh_f=(0.03, 0.06), rh_r=(0.06, 0.11), order=2)
+    assert set(fit["coefficients"]) == set(FRONT_TERMS + REAR_TERMS) and fit["coefficients"]["c3_F"] == 0.0 and fit["errors"]["front"]["max"] < 0.02 and fit["errors"]["rear"]["max"] < 0.02
+    rng = np.random.default_rng(0)
+    for _ in range(10):
+        f, r = rng.uniform(0.03, 0.06), rng.uniform(0.06, 0.11)
+        ac = aero.evaluate(200.0, f, r)
+        ocd = ocd_lift(fit["coefficients"], f, r)
+        assert ocd[0] == pytest.approx(ac["front"], abs=0.03) and ocd[1] == pytest.approx(ac["rear"], abs=0.03)
+    assert fit["c_d"] == pytest.approx(aero.evaluate(200.0, 0.045, 0.09)["cxa"], rel=0.02)
+    full = aero.fit_ocd(v_kmh=200.0, rh_f=(0.03, 0.06), rh_r=(0.06, 0.11), order=3)
+    assert full["errors"]["front"]["max"] <= fit["errors"]["front"]["max"] + 1e-9           # more terms never fit worse
+
+
+def test_the_replica_takes_its_aero_from_the_wing_model(tmp_path):
+    car = AcCar(wing_folder(tmp_path / "wings"))
+    r = build_replica(car)
+    assert r["meta"]["aero"]["source"] == "ac"
+    o = r["ocd"]
+    model = AcAero.from_car(car, find_aero_curves(car)[0], Geometry(wheelbase=3.5, lf=(1 - 0.45) * 3.5, cg_height=0.5 * (0.33 - 0.07 + 0.33 - 0.07), static_ride=(0.045, 0.090), rho=1.2))
+    ac = model.evaluate(200.0, 0.045, 0.090)
+    coef = {t: o[P + f"aerodynamics.{t}"] for t in FRONT_TERMS + REAR_TERMS}
+    front, rear = ocd_lift(coef, 0.045, 0.090)
+    assert front == pytest.approx(ac["front"], abs=0.05) and rear == pytest.approx(ac["rear"], abs=0.05)
+    assert o[P + "aerodynamics.c_d"] == pytest.approx(ac["cxa"], rel=0.05) and o[P + "aerodynamics.A_m2"] == 1.0
+    assert any(row["group"] == "Aero" and row["status"] == "fitted" for row in r["report"])
+
+
+def test_no_curves_named_means_the_stand_in_aero_and_a_clear_reason(tmp_path):
+    r = build_replica(AcCar(write_folder(tmp_path / "ok")))                              # the small synthetic car names no aero curve
+    assert r["meta"]["aero"]["source"] == "placeholder" and "names no .lut" in r["meta"]["aero"]["reason"]
+    assert any(row["status"] == "placeholder" and row["group"] == "Aero" for row in r["report"])
+    bare = wing_folder(tmp_path / "bare")
+    (bare / "front_cl.lut").unlink()
+    with pytest.raises(AeroCurveError):
+        find_aero_curves(AcCar(bare))
+
+
+def test_the_header_curves_decide_the_tyre_curves(tmp_path):
+    """Two 1000-point curves with a [VALUES] header (the car's own) and one without (a stock curve): the lateral curve is the one whose peak angle plus FLEX x FZ0 lands on FRICTION_LIMIT_ANGLE."""
+    from style_rl.accar.tyre_fit import mf_curve
+    path = write_folder(tmp_path / "tyres")
+    tyres = TYRES.replace("FRICTION_LIMIT_ANGLE=6.0", "FRICTION_LIMIT_ANGLE=6.0\nFLEX=0.00046").replace("FRICTION_LIMIT_ANGLE=5.8", "FRICTION_LIMIT_ANGLE=5.8\nFLEX=0.00046")
+    (path / "tyres.ini").write_text(tyres)
+    s = np.arange(1000) / 1000.0
+
+    def curve_file(cf, header=True):
+        y = mf_curve(s, cf / 1.27, 1.27, -1.8)
+        y = y / y.max()
+        return ("[VALUES]\nC=1.27\nE=-1.8\nCF=%g\n" % cf if header else "") + "\n".join(f"{x:g}|{v:.6g}" for x, v in zip(s, y)) + "\n"
+    (path / "lat.lut").write_text(curve_file(29.0))
+    (path / "lon.lut").write_text(curve_file(18.0))
+    (path / "stock.lut").write_text(curve_file(24.0, header=False))
+    r = build_replica(AcCar(path))
+    note = [row for row in r["report"] if row["item"] == "which force curves"][0]["ac"]
+    assert "lateral, both axles: curve lat.lut" in note and "longitudinal: curve lon.lut" in note
+
+
+@real_data
+def test_the_real_aero_curves_are_identified_and_balance_the_car():
+    """Properties of the identified curves (not their stored names, which the game folder scrambles): the front wing table is the strong one, the body drag is near 0.5, the diffuser stalls after 3 degrees,
+    and the downforce is shared between the axles as the weight is (the designers' balance)."""
+    car = AcCar(REAL_DIR)
+    curves, notes = find_aero_curves(car)
+    at = lambda name, x: float(np.interp(x, curves[name][:, 0], curves[name][:, 1]))
+    assert 0.3 < at("wing_body_AOA_CD.lut", 2) < 0.8                                                     # the body carries most of the drag
+    assert at("wing_front_AOA_CL.lut", 14) > at("wing_rear_AOA_CL.lut", 14) > 0.1 and at("wing_rear2_AOA_CL.lut", 15) == pytest.approx(at("wing_rear_AOA_CL.lut", 15), abs=0.03)
+    assert at("wing_diffuser_AOA_CL.lut", 3) > 0.5 and at("wing_diffuser_AOA_CL.lut", 6) < at("wing_diffuser_AOA_CL.lut", 3)            # the diffuser stalls
+    assert at("height_diffuser_CL.lut", 0.02) < at("height_diffuser_CL.lut", 0.05)                    # nothing near the road
+    assert at("wing_controller_highspeed.lut", 300) < at("wing_controller_highspeed.lut", 200) <= 1.0 and at("wing_controller_monkey_speed.lut", 280) < 0.5
+    assert all(n["confidence"] in ("sure", "by balance", "little effect") for n in notes) and len(curves) >= 26
+    model = AcAero.from_car(car, curves)
+    r = model.evaluate(150.0, *model.geo.static_ride)
+    share = r["front"] / (r["front"] + r["rear"])
+    weight_share = 1 - model.geo.lf / model.geo.wheelbase
+    assert share == pytest.approx(weight_share, abs=0.02)
+    assert 3.0 < r["front"] + r["rear"] < 4.5 and 1.1 < r["cxa"] < 1.6
+    drs = model.evaluate(150.0, *model.geo.static_ride, angle_mult={7: 0.0})
+    assert 0.1 < 1 - drs["cxa"] / r["cxa"] < 0.25 and 0.1 < 1 - (drs["front"] + drs["rear"]) / (r["front"] + r["rear"]) < 0.25         # opening the DRS: a realistic loss of drag and downforce

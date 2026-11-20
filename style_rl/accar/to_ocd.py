@@ -16,6 +16,8 @@ import math
 
 import numpy as np
 
+from .aero import FRONT_TERMS, REAR_TERMS, AcAero, Geometry
+from .aero_curves import AeroCurveError, find_aero_curves
 from .ini import num, vec
 from .tyre_fit import axle_coefficients, fit_shape
 
@@ -24,8 +26,65 @@ SUSP = P + "suspension."
 G = 9.81
 FUEL_DENSITY_KG_PER_L = 0.75          # assumed, the density AC is generally taken to use
 AIR_DENSITY = 1.20                    # kg/m3: AC takes it from the weather (about 1.18 at 26 C); OCD's own default is 1.225
-# TUM F1_Shanghai aero numbers, used where the AC aero curves cannot be read (see report): CzA front, CzA rear, CxA at the reference ride heights 35 mm / 85 mm
+AERO_FIT_KMH = 200.0                  # OCD's aero coefficients do not depend on speed: AC's aero is fitted at this speed (the corner speeds); the speed table in the report shows the rest
+# TUM F1_Shanghai aero numbers, used only where the AC aero curves cannot be found (see report): CzA front, CzA rear, CxA at the reference ride heights 35 mm / 85 mm
 AERO_PLACEHOLDER = {"cza_front": 2.20, "cza_rear": 2.68, "cxa": 1.56, "h_ref_front": 0.035, "h_ref_rear": 0.085, "per_m": 2.0}
+
+
+def _put_aero(car, put, rep, geo):
+    """OCD's aero parameters from AC's own wing model (aero.ini and its curve files), or the TUM stand-in when the curves cannot be found. Returns a dict for replica["meta"]["aero"]."""
+    try:
+        curves, curve_notes = find_aero_curves(car)
+        model = AcAero.from_car(car, curves, geo)
+        fit = model.fit_ocd(v_kmh=AERO_FIT_KMH)
+    except (AeroCurveError, KeyError) as e:
+        a = AERO_PLACEHOLDER
+        put(P + "aerodynamics.c_d", a["cxa"])
+        put(P + "aerodynamics.c0", a["cza_front"] * (1 + a["per_m"] * a["h_ref_front"]))
+        put(P + "aerodynamics.c1_F", -a["cza_front"] * a["per_m"])
+        put(P + "aerodynamics.a0", a["cza_rear"] * (1 + a["per_m"] * a["h_ref_rear"]))
+        put(P + "aerodynamics.a1_R", -a["cza_rear"] * a["per_m"])
+        for k in ("c2_F", "c3_F", "c1_R", "c2_R", "c3_R", "c4", "c5", "c6", "a1_F", "a2_F", "a3_F", "a2_R", "a3_R", "a4", "a5", "a6"):
+            put(P + f"aerodynamics.{k}", 0.0)
+        rep.add("Aero", "downforce and drag (stand-in)", f"TUM F1_Shanghai: CzA {a['cza_front']} front + {a['cza_rear']} rear, CxA {a['cxa']} m2, +{a['per_m']:g} % per cm below the reference height",
+                P + "aerodynamics.c0, c1_F, a0, a1_R, c_d", [a["cza_front"], a["cza_rear"], a["cxa"]], "placeholder", f"AC's wing model could not be used: {e}")
+        return {"source": "placeholder", "reason": str(e)}
+    for term in FRONT_TERMS + REAR_TERMS:
+        put(P + f"aerodynamics.{term}", fit["coefficients"][term])
+    put(P + "aerodynamics.c_d", fit["c_d"])
+    at = model.evaluate(AERO_FIT_KMH, *geo.static_ride)
+    wings = [(r["wing"], r["key"], r["angle_deg"], r["height_mm"], r["cza"], r["cxa"]) for r in at["rows"]]
+    speeds = {}
+    for v in (60, 100, 150, 200, 250, 300):
+        r = model.evaluate(v, *geo.static_ride)
+        speeds[v] = {"front": r["front"], "rear": r["rear"], "cxa": r["cxa"], "downforce_N": r["downforce_N"], "drag_N": r["drag_N"]}
+    drs = model.evaluate(AERO_FIT_KMH, *geo.static_ride, angle_mult={7: 0.0})
+    total, front_share = at["front"] + at["rear"], at["front"] / (at["front"] + at["rear"])
+    rep.add("Aero", "wings in AC", "; ".join(f"{n} {a_:.2f} m2 angle {ang:g} CLgain {cl:g} CDgain {cd:g}" for n, a_, ang, cl, cd in
+                                             [(w.name, w.area, w.angle, w.cl_gain, w.cd_gain) for w in model.wings]), "-", "-", "converted",
+            "AC's wing model is evaluated (aero.ini): lift and drag of each wing = 0.5 rho v^2 x chord x span x table(angle + body pitch) x gain x height multiplier; the dynamic controllers (steering, speed, throttle) "
+            "are applied for straight running; the downforce of each wing is moved to the two axles by moment balance about the CG (rustyAC docs/map/aero.md)")
+    by_conf = {}
+    for n in curve_notes:
+        by_conf.setdefault(n["confidence"], []).append(f"{n['role']} = {n['stored_in']}")
+    rep.add("Aero", "which curve file is which", "; ".join(f"[{c}] " + ", ".join(v) for c, v in sorted(by_conf.items())), "-", "-", "estimated" if car.scrambled else "exact",
+            ("the curve files have lost their names: identified by what the tables look like, by the limits of the controllers, and, for the front/rear wing pair, by the aero balance (see aero_curves.py); "
+             if car.scrambled else "found by the names aero.ini gives") + ". 'sure' = the only table of its kind; 'by balance' = decided by the front share of the downforce; 'little effect' = a choice that changes the aero by under 2 %")
+    rep.add("Aero", f"downforce and drag at {AERO_FIT_KMH:g} km/h, static ride heights", f"CzA {at['front']:.3f} front axle + {at['rear']:.3f} rear axle = {total:.3f} m2 ({100 * front_share:.1f} % on the front axle), "
+            f"CxA {at['cxa']:.3f} m2; {at['downforce_N'] / 1000:.1f} kN down, {at['drag_N'] / 1000:.1f} kN drag at {AERO_FIT_KMH:g} km/h", P + "aerodynamics.c0 ... c6, a0 ... a6, c_d",
+            [fit["coefficients"][t] for t in ("c0", "c1_F", "c1_R", "c2_F", "c2_R", "c4")] + [fit["coefficients"][t] for t in ("a0", "a1_F", "a1_R", "a2_F", "a2_R", "a4")] + [fit["c_d"]], "fitted",
+            f"quadratic polynomials of OCD's RIDE_HEIGHT model fitted to AC's wing model over front ride height {1000 * fit['box']['rh_f'][0]:.0f} to {1000 * fit['box']['rh_f'][1]:.0f} mm and rear "
+            f"{1000 * fit['box']['rh_r'][0]:.0f} to {1000 * fit['box']['rh_r'][1]:.0f} mm: mean error {fit['errors']['front']['mean']:.3f} / {fit['errors']['rear']['mean']:.3f} m2, largest "
+            f"{fit['errors']['front']['max']:.2f} / {fit['errors']['rear']['max']:.2f} m2 (front / rear axle); c_d is the mean drag over the box. The front share equals the weight share of the front axle "
+            f"({100 * (1 - geo.lf / geo.wheelbase):.1f} %) by AC's design")
+    rep.add("Aero", "per wing", "; ".join(f"{n}: CzA {z:.2f} CxA {x:.2f} (angle {ang:.1f} deg, {h:.0f} mm above the road)" for n, _, ang, h, z, x in wings), "-", "-", "converted",
+            f"at {AERO_FIT_KMH:g} km/h, static ride heights, full throttle, straight")
+    rep.add("Aero", "change with speed (not in OCD)", "; ".join(f"{v} km/h: CzA {s['front'] + s['rear']:.2f} ({100 * s['front'] / (s['front'] + s['rear']):.0f} % front), CxA {s['cxa']:.2f}" for v, s in speeds.items()),
+            "-", "-", "not modelled", "AC's monkey seat fades and the wing angles shrink above about 245 km/h (the speed controllers), so AC has less downforce and drag at the top speed than OCD's constant coefficients")
+    rep.add("Aero", "DRS (not in OCD)", f"opening it (wing 7 EFFECT 0) takes CzA {at['front'] + at['rear']:.2f} -> {drs['front'] + drs['rear']:.2f} and CxA {at['cxa']:.2f} -> {drs['cxa']:.2f}", "-", "-", "not modelled",
+            "DRS is not used in the replica; the numbers are what a later DRS option would use")
+    return {"source": "ac", "fit": {k: fit[k] for k in ("coefficients", "c_d", "errors", "box", "v_kmh", "order")}, "wings": wings, "speeds": speeds, "curves": curve_notes,
+            "static": {"front": at["front"], "rear": at["rear"], "cxa": at["cxa"]}, "drs": {"cza": drs["front"] + drs["rear"], "cxa": drs["cxa"]}}
 
 
 class Report:
@@ -51,7 +110,7 @@ def report_markdown(replica):
     if meta["scrambled"]:
         out += ["", "**The file names in this folder do not match their contents** (an unpacking problem). The files were recognised by their contents:", ""]
         out += [f"- the {role} data is stored in `{disk}` (it should be `{std}`)" for role, (disk, std) in sorted(meta["name_map"].items())]
-        out += ["", "The curve files (.lut) can therefore not be trusted by name. What was found by shape is listed under *Engine* and *Tyres*; the aero curves were not used (see *Aero*)."]
+        out += ["", "The curve files (.lut) can therefore not be trusted by name. What was found by shape is listed under *Engine*, *Tyres* and *Aero*."]
     out += [""]
     group = None
     for r in replica["report"]:
@@ -166,7 +225,6 @@ def build_replica(car, *, fuel_l=None, compound=None, ers=False, turbo="ac"):
     f_roll = 4 * (rr0 + rr1 * 60.0 ** 2) / (mass * G)
     put(P + "tire.rolling_resistance_coefficient", f_roll)
     rep.add("Tyres", "rolling resistance", f"{rr0:g} N + {rr1:g} v^2 per tyre", P + "tire.rolling_resistance_coefficient", f_roll, "estimated", "OCD has a constant coefficient: AC's formula evaluated at 60 m/s")
-    lat_h = car.lateral_curve_header()
     curve_notes = []
     shapes = {}
     for name, c in car.curves.items():
@@ -174,13 +232,27 @@ def build_replica(car, *, fuel_l=None, compound=None, ers=False, turbo="ac"):
             C, E, rms = fit_shape(c)
             peak = float(c[np.argmax(c[:, 1]), 0])
             shapes[name] = {"C": C, "E": E, "CF": float((c[1, 1] - c[0, 1]) / (c[1, 0] - c[0, 0])), "peak": peak, "rms": rms}
-    # the force curves of the tyre model: normalised force against slip (rad for the lateral one). Which curve belongs to which tyre is not stated anywhere readable: the lateral curves are taken
-    # as the ones whose peak slip angle is closest to FRICTION_LIMIT_ANGLE of the front / rear tyre, the longitudinal one as the remaining curve that occurs twice (front and rear)
+    # the force curves of the tyre model: normalised force against slip (rad for the lateral one). The two curves that carry a [VALUES] header (C, E, CF) were made for this car, the others are the game's
+    # stock curves for other tyres. The lateral one is the header curve whose peak slip angle plus FLEX x FZ0 (the slip angle the tyre's flex adds at the reference load) lands on FRICTION_LIMIT_ANGLE:
+    # for the front tyre of the SF70H that is 4.24 + 1.88 = 6.12 against 6.1 degrees; the other header curve is the longitudinal one. Without that structure: the old rule (peak closest to the limit angle)
+    headed = {k: v for k, v in shapes.items() if {"C", "E", "CF"} <= set(car.curve_headers.get(k, {}))}
     ordered = sorted(shapes.items(), key=lambda kv: kv[1]["peak"])
     lim_f, lim_r = math.radians(num(fr["FRICTION_LIMIT_ANGLE"])), math.radians(num(rr["FRICTION_LIMIT_ANGLE"]))
     dup = [k for k, v in shapes.items() if sum(abs(v["CF"] - w["CF"]) < 1e-6 and abs(v["peak"] - w["peak"]) < 1e-6 for w in shapes.values()) >= 2]
     lat_pool = {k: v for k, v in shapes.items() if k not in dup}
-    if len(lat_pool) >= 2:
+    k_hf = k_hr = None
+    if len(headed) == 2:
+        eff = lambda v, t: math.degrees(v["peak"]) + num(t.get("FLEX"), 0.0) * num(t["FZ0"])          # the lateral peak as the file states it: curve peak + flex at the reference load (degrees)
+        k_hf = min(headed, key=lambda k: abs(eff(headed[k], fr) - math.degrees(lim_f)))
+        k_hr = min(headed, key=lambda k: abs(eff(headed[k], rr) - math.degrees(lim_r)))
+    if k_hf is not None and k_hf == k_hr:
+        k_long = next(k for k in headed if k != k_hf)
+        lat_f = lat_r = headed[k_hf]
+        long_curve = headed[k_long]
+        curve_notes.append(f"lateral, both axles: curve {k_hf} (CF {lat_f['CF']:g}; peak {math.degrees(lat_f['peak']):.2f} deg + flex {num(fr.get('FLEX'), 0.0) * num(fr['FZ0']):.2f} = "
+                           f"{eff(lat_f, fr):.2f} deg against FRICTION_LIMIT_ANGLE {math.degrees(lim_f):.1f} at the front, {eff(lat_f, rr):.2f} against {math.degrees(lim_r):.1f} at the rear); "
+                           f"longitudinal: curve {k_long} (CF {long_curve['CF']:g}, peak slip ratio {long_curve['peak']:.3f}); the other three curves are stock curves of the game (no [VALUES] header)")
+    elif len(lat_pool) >= 2:
         k_lat_f = min(lat_pool, key=lambda k: abs(lat_pool[k]["peak"] - lim_f))
         k_lat_r = min((k for k in lat_pool if k != k_lat_f), key=lambda k: abs(lat_pool[k]["peak"] - lim_r))
         lat_f, lat_r = lat_pool[k_lat_f], lat_pool[k_lat_r]
@@ -269,24 +341,11 @@ def build_replica(car, *, fuel_l=None, compound=None, ers=False, turbo="ac"):
             "OCD's convention: static ride height h is passed as -h")
 
     # ---------------------------------------------------------------- aero
-    a = AERO_PLACEHOLDER
     put(P + "aerodynamics.air_density_kgpm3", AIR_DENSITY)
     put(P + "aerodynamics.A_m2", 1.0)
-    put(P + "aerodynamics.c_d", a["cxa"])
     put(P + "aerodynamics.l", wheelbase)
     put(P + "aerodynamics.l_f", lf)
-    put(P + "aerodynamics.c0", a["cza_front"] * (1 + a["per_m"] * a["h_ref_front"]))
-    put(P + "aerodynamics.c1_F", -a["cza_front"] * a["per_m"])
-    put(P + "aerodynamics.a0", a["cza_rear"] * (1 + a["per_m"] * a["h_ref_rear"]))
-    put(P + "aerodynamics.a1_R", -a["cza_rear"] * a["per_m"])
-    for k in ("c2_F", "c3_F", "c1_R", "c2_R", "c3_R", "c4", "c5", "c6", "a1_F", "a2_F", "a3_F", "a2_R", "a3_R", "a4", "a5", "a6"):
-        put(P + f"aerodynamics.{k}", 0.0)
-    wings = [(k, v["NAME"], num(v["CHORD"]) * num(v["SPAN"]), num(v["ANGLE"]), num(v["CL_GAIN"]), num(v["CD_GAIN"])) for k, v in sorted(car.ini["aero"].items()) if k.startswith(("WING_", "FIN_"))]
-    rep.add("Aero", "wings in AC", "; ".join(f"{n} {a_:.2f} m2 angle {ang:g} CLgain {cl:g} CDgain {cd:g}" for _, n, a_, ang, cl, cd in wings), "-", "-", "not modelled",
-            "downforce comes from the wing LUT curves (angle -> CL, CD; height -> multiplier) whose files lost their names: they could not be matched, so the aero is NOT AC's yet")
-    rep.add("Aero", "downforce and drag (stand-in)", f"TUM F1_Shanghai: CzA {a['cza_front']} front + {a['cza_rear']} rear, CxA {a['cxa']} m2, +{a['per_m']:g} % per cm below the reference height",
-            P + "aerodynamics.c0, c1_F, a0, a1_R, c_d", [ocd[P + "aerodynamics.c0"], ocd[P + "aerodynamics.c1_F"], ocd[P + "aerodynamics.a0"], ocd[P + "aerodynamics.a1_R"], a["cxa"]], "placeholder",
-            "the same stand-in as ocd_first_lap's car; replace it by AC's own wing model when the curve files are named correctly")
+    aero_meta = _put_aero(car, put, rep, Geometry(wheelbase=wheelbase, lf=lf, cg_height=h_cg, static_ride=(ride_f, ride_r), rho=AIR_DENSITY))
 
     # ---------------------------------------------------------------- brakes
     brk = car.ini["brakes"]["DATA"]
@@ -350,10 +409,11 @@ def build_replica(car, *, fuel_l=None, compound=None, ers=False, turbo="ac"):
     not_modelled = ["AC's double-wishbone geometry: camber gain, bump steer, roll and pitch centres (OCD has one fixed roll centre per car, taken from the hard points, and fixed pitch centres)",
                     "tyre temperature, wear, pressure and speed sensitivity; grain and blister",
                     "progressive spring rates; the upper bump stops and the heave packers",
-                    "DRS and the dynamic wing angles (steering, speed, throttle controllers)",
-                    "the MGU-H, the ERS deployment strategies, engine braking, shift times",
-                    "AC's aero curves (see the Aero section)"]
+                    "DRS, the fins (side force in yaw) and the speed dependence of AC's aero: OCD's aero coefficients are constants (fitted at 200 km/h) while AC's monkey seat and wing angles fade above about 245 km/h",
+                    "the MGU-H, the ERS deployment strategies, engine braking, shift times"]
+    if aero_meta["source"] != "ac":
+        not_modelled.append("AC's aero: the curve files could not be used, the TUM stand-in is in the car (see the Aero section)")
     return {"meta": {"folder": str(car.folder), "scrambled": car.scrambled, "name_map": car.name_map(), "compound": comp["name"], "fuel_l": fuel_l, "ers_default": bool(ers), "turbo_default": turbo,
-                     "warnings": list(car.warnings), "found_by_shape": curve_found},
+                     "warnings": list(car.warnings), "found_by_shape": curve_found, "aero": aero_meta},
             "ocd": ocd, "car_spec": car_spec, "setup": {"brake_bias_front": share, "final_drive_ratio": 1.0}, "powertrain": powertrain, "env": env,
             "report": rep.rows, "not_modelled": not_modelled}

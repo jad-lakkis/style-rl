@@ -1,7 +1,7 @@
 """What the replica's own numbers predict for the limits of the car (no simulator needed), to be held against what OCD measures for the same car (scripts/measure_ocd_envelope.py).
 
 The three curves have the format of data/ocd_envelope.json (full-pedal acceleration, braking g, cornering g, each against speed). They use the same aero as the replica (CzA, CxA at the static ride
-heights: at speed the car sinks and the real aero is a little stronger), AC's tyre law for the grip at each tyre's load, and the powertrain of the replica at full boost:
+heights, fitted at 200 km/h: at speed the car sinks, and AC's own aero changes with speed), AC's tyre law for the grip at each tyre's load, and the powertrain of the replica at full boost:
 
   acceleration   best gear, full pedal, full boost: (wheel force - aero drag - rolling drag) / mass, capped by what the driven (rear) tyres can transmit (weight transfer ignored)
   braking        every tyre at its longitudinal grip limit plus drag, or the brake torque if that is smaller (weight transfer ignored)
@@ -12,6 +12,7 @@ by more than the aero difference at speed. A bigger gap means a conversion is wr
 """
 import numpy as np
 
+from .aero import FRONT_TERMS, REAR_TERMS, ocd_lift
 from .powertrain import full_throttle_axle_force
 
 G = 9.81
@@ -31,8 +32,7 @@ def aero_forces(ocd, v, ride_front=None, ride_rear=None):
     rho = ocd[P + "aerodynamics.air_density_kgpm3"]
     hf = -ocd[P + "aerodynamics.static_ride_height_front_m"] if ride_front is None else ride_front
     hr = -ocd[P + "aerodynamics.static_ride_height_rear_m"] if ride_rear is None else ride_rear
-    czf = ocd[P + "aerodynamics.c0"] + ocd[P + "aerodynamics.c1_F"] * hf
-    czr = ocd[P + "aerodynamics.a0"] + ocd[P + "aerodynamics.a1_R"] * hr
+    czf, czr = ocd_lift({t: ocd.get(P + f"aerodynamics.{t}", 0.0) for t in FRONT_TERMS + REAR_TERMS}, hf, hr)     # OCD's polynomials in the two ride heights, clamped to [0, 5]
     q = 0.5 * rho * np.asarray(v, float) ** 2 * ocd[P + "aerodynamics.A_m2"]
     return q * czf, q * czr, q * ocd[P + "aerodynamics.c_d"]
 
