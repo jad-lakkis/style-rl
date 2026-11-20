@@ -30,6 +30,16 @@ class DemoDriver:
         self.tc_span = cfg.tc_span if tc_span is None else tc_span
         self.tc = traction_control
         self.integral = 0.0
+        g, b = cfg.demo_throttle_gamma, cfg.demo_throttle_boost
+        if g > 0.0 and b > 0.0:
+            p = np.linspace(0.0, 1.0, 1001)
+            self._pedal_grid, self._torque_grid = p, p * (1.0 + b * p ** g) / (1.0 + b)
+        else:
+            self._pedal_grid = self._torque_grid = None
+
+    def pedal_for_torque(self, u):
+        """The throttle pedal that gives the torque fraction u (the pedal itself when the car's throttle is linear)."""
+        return u if self._pedal_grid is None else float(np.interp(u, self._torque_grid, self._pedal_grid))
 
     def reset(self):
         self.integral = 0.0
@@ -51,6 +61,7 @@ class DemoDriver:
             slip = max(abs(state.get("slip_rl", 0.0)), abs(state.get("slip_rr", 0.0)))
             throttle *= max(0.0, 1.0 - (slip - self.tc_start) / self.tc_span)
         dz, full = self.cfg.pedal_deadzone, self.cfg.pedal_full_at
+        throttle = self.pedal_for_torque(throttle)
         return np.array([steer, pedal_to_action(throttle, dz, full_at=full), pedal_to_action(brake, dz, full_at=full)], dtype=np.float32)
 
     def lap_target(self, station, fraction, v):

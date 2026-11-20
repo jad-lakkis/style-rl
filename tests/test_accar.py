@@ -575,3 +575,16 @@ def test_a_reset_at_speed_starts_in_the_right_gear():
     fast = make_pt("steady")
     fast.update_gear(omega_for(30000, fast.ratios[0]), 0.0)          # far above the limit in first gear: ends in the top gear
     assert fast.gear == 2
+
+
+def test_the_scripted_driver_inverts_the_turbo_pedal_curve():
+    from dataclasses import replace
+    from style_rl.drive.config import EnvConfig
+    from style_rl.drive.demo import DemoDriver
+    plain = DemoDriver(None, EnvConfig())
+    assert plain.pedal_for_torque(0.37) == 0.37
+    ac = DemoDriver(None, replace(EnvConfig(), demo_throttle_gamma=5.75, demo_throttle_boost=3.4))
+    for u in (0.0, 0.2, 0.5, 0.9, 1.0):
+        p = ac.pedal_for_torque(u)
+        assert p * (1 + 3.4 * p ** 5.75) / 4.4 == pytest.approx(u, abs=2e-3)       # the torque fraction the pedal gives
+    assert ac.pedal_for_torque(0.5) > 0.5 and ac.pedal_for_torque(1.0) == pytest.approx(1.0)       # a half torque needs more than a half pedal
