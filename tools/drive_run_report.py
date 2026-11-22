@@ -114,24 +114,28 @@ def style(ax):
     ax.set_axisbelow(True)
 
 
-def fig_progress(ev, best, out):
+A1_NOTE = "at the start of the run the copy of the teacher laps in 251 s (off this chart)"
+
+
+def fig_progress(ev, best, out, name="a1", refs=None, ylim=(109.5, 126.5), note=A1_NOTE, note_y=0.88, best_dy=-2.35):
     ev = [e for e in ev if e["step"] >= 1000]
     steps = np.array([e["step"] for e in ev]) / 1e6
     fig, (ax, bx) = plt.subplots(2, 1, figsize=(11.5, 7.6), sharex=True, gridspec_kw={"height_ratios": [3.3, 1.6], "hspace": 0.1})
-    for y, label, ls in REFERENCES:
+    for y, label, ls in (REFERENCES if refs is None else refs):
         ax.axhline(y, color=GREY, lw=1.0, ls=ls, zorder=1)
         ax.text(0.006, y + 0.08, label, transform=ax.get_yaxis_transform(), ha="left", va="bottom", fontsize=9, color=MUTED)
     clean = [(e["step"] / 1e6, e["det_lap2_s"]) for e in ev if e["det_clean"]]
     ax.plot([c[0] for c in clean], [c[1] for c in clean], ls="none", marker="o", ms=9, color=BLUE, mec="white", mew=1.2, zorder=4, label="test without noise: lap 2 of 2 (clean runs only)")
     noisy = [(e["step"] / 1e6, e["sto_lap2_mean_s"]) for e in ev if e["sto_lap2_mean_s"] is not None]
     ax.plot([c[0] for c in noisy], [c[1] for c in noisy], marker="D", ms=6.5, lw=1.4, color=ORANGE, mec="white", mew=1.0, zorder=3, label="average lap with training noise (clean laps only)")
-    ax.annotate(f'best: {best["det_lap2_s"]:.2f} s\nat step {best["step"] // 1000}k', xy=(best["step"] / 1e6, best["det_lap2_s"]), xytext=(best["step"] / 1e6 - 0.07, best["det_lap2_s"] - 2.35),
+    ax.annotate(f'best: {best["det_lap2_s"]:.2f} s\nat step {best["step"] // 1000}k', xy=(best["step"] / 1e6, best["det_lap2_s"]), xytext=(best["step"] / 1e6 - 0.07, best["det_lap2_s"] + best_dy),
                 fontsize=10, color=INK, ha="center", arrowprops=dict(arrowstyle="-", color=INK, lw=0.9))
-    ax.text(0.006, 0.88, "at the start of the run the copy of the teacher laps in 251 s (off this chart)", transform=ax.transAxes, fontsize=9.5, color=INK, va="top")
-    ax.set_ylim(109.5, 126.5)
+    if note:
+        ax.text(0.006, note_y, note, transform=ax.transAxes, fontsize=9.5, color=INK, va="top")
+    ax.set_ylim(*ylim)
     ax.set_ylabel("lap time, s  (lower is better)", fontsize=11)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, 0.86), frameon=False, fontsize=10, ncol=1)
-    ax.set_title("Run a1: lap time and clean laps, tested every 50,000 training steps", loc="left", fontsize=13, color=INK, pad=12)
+    ax.set_title(f"Run {name}: lap time and clean laps, tested every 50,000 training steps", loc="left", fontsize=13, color=INK, pad=12)
     style(ax)
 
     n = np.array([e["sto_clean"] for e in ev])
@@ -207,7 +211,14 @@ def main():
     ap.add_argument("--envelope", type=Path, default=ROOT / "data/ocd_envelope.json")
     ap.add_argument("--corners", type=Path, default=ROOT / "data/monza_corners.csv")
     ap.add_argument("--margin", type=float, default=1.5)
+    ap.add_argument("--name", default="a1", help="run name in the title of figure 1")
+    ap.add_argument("--ref", action="append", default=None, metavar="VALUE|LABEL|STYLE", help="reference line of figure 1 (repeatable); STYLE is a matplotlib line style such as -- or :; default: the four a1 references")
+    ap.add_argument("--ylim", type=float, nargs=2, default=(109.5, 126.5), metavar=("LOW", "HIGH"), help="lap-time axis of figure 1, s")
+    ap.add_argument("--note", default=A1_NOTE, help="line of text at the top of figure 1 ('' for none)")
+    ap.add_argument("--note-y", type=float, default=0.88, help="height of that text in figure 1, 0 (bottom) to 1 (top)")
+    ap.add_argument("--best-dy", type=float, default=-2.35, help="where the 'best' label of figure 1 sits relative to the best lap, s")
     a = ap.parse_args()
+    refs = None if a.ref is None else [(float(v), label, ls) for v, label, ls in (r.split("|") for r in a.ref)]
     a.out.mkdir(parents=True, exist_ok=True)
     course = Course(a.track, a.envelope, margin_m=a.margin, grid_m=1.0)
     L = course.L
@@ -215,7 +226,7 @@ def main():
     evaluation_table(ev).to_csv(a.out / "evaluations.csv", index=False)
     clean = [e for e in ev if e["det_clean"] and e["det_lap2_s"] is not None and e["step"] >= 1000]
     best = min(clean, key=lambda e: e["det_lap2_s"])
-    fig_progress(ev, best, a.out / "fig_1_progress.png")
+    fig_progress(ev, best, a.out / "fig_1_progress.png", name=a.name, refs=refs, ylim=tuple(a.ylim), note=a.note, note_y=a.note_y, best_dy=a.best_dy)
 
     segs = sectors(L, a.corners)
     clock = ceiling_clock(course)
