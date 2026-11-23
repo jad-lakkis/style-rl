@@ -137,7 +137,8 @@ def main():
             "txt": {"speedDiff": "speed minus the limit lap's speed at the same place, m/s", "gapDiff": "time gap to the limit lap, s (below 0 = ahead)", "lineVs": "line vs limit lap (+ left)", "speedVs": "speed vs limit lap", "ref": "limit lap"},
             "nostyle": True, "nobrief": True, "drvlabel": "Run", "cam": "keep",
             "pagetitle": "Run a2 at Monza: the AI driver against the older car and the real 2017 laps",
-            "lede": f"The AI driver's best clean lap on the Ferrari SF70H replica is {ai_t:.2f} s, {gap_pct:.1f} % above the fastest lap the replica can physically do on our line. Below: how that compares with the older car and with the real 2017 Italian GP, then the lap itself, replayed against the limit lap.",
+            "lede": f"Press Play to watch the AI driver's best clean lap ({ai_t:.2f} s, {gap_pct:.1f} % above the fastest lap the replica can physically do on our line) in 3D: drag to look around, use the wheel to zoom, or switch to the 2D map. Under the replay: how the lap times compare with the older car and the real 2017 laps.",
+            "jump_text": "Jump to the lap times ↓",
             "chart_title": "Lap times at Monza, in seconds", "chart_sub": "Green: real 2017 cars from the official timing. Blue and orange: our simulator.",
             "title": "Replay: the AI driver's best lap, the replica's limit lap and the older car",
             "about": f"Blue: the AI driver's best clean lap (run a2, step {a.step:,}, lap {a.lap} of the test, {ai_t:.2f} s). Grey: the limit lap of the replica ({ghost_t:.2f} s), the speed the car could physically reach along the same line. "

@@ -26,7 +26,11 @@ body.viz-root{
 }
 body.viz-root{font:14px/1.45 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;margin:0;background:var(--page);color:var(--text-primary)}
 .page{max-width:1400px;margin:0 auto;padding:18px 20px 40px}
-#top{max-width:1240px}
+#head,#compare{max-width:1240px}
+#head .lede{margin:4px 0 8px}
+h2.sec{font-size:19px;font-weight:650;margin:34px 0 12px;letter-spacing:-.01em}
+#compare{margin-top:6px}
+#head a{color:var(--s1)}
 h1.page-title{font-size:24px;line-height:1.25;margin:0;font-weight:650;letter-spacing:-.01em}
 h2{font-size:16px;margin:0}
 h3{font-size:13px;margin:14px 0 4px;color:var(--text-primary)}
@@ -111,18 +115,9 @@ input[type=range]{vertical-align:middle}
 #about{padding:8px 0 0 0;max-width:120ch}
 @media (max-width:900px){.left{width:100%}canvas{max-width:100%;height:auto}}
 </style></head><body class="viz-root"><div class="page">
-<div id="top">
+<div id="head">
 <div class="topbar"><h1 class="page-title" id="ptitle"></h1><button id="themebtn" class="ghost" type="button" aria-label="Switch between the light and the dark colours">Light / dark</button></div>
 <p class="lede" id="lede"></p>
-<div class="kpis" id="kpis"></div>
-<section class="card" id="benchcard" aria-labelledby="bt">
-<div class="cardhead"><div><h2 class="ctitle" id="bt"></h2><p class="csub" id="bsub"></p></div><button id="tblbtn" class="ghost" type="button" aria-pressed="false">Table view</button></div>
-<div class="legend" id="legend" role="list"></div>
-<div id="chartwrap"><div class="chart" id="chart"></div><div class="axis"><div></div><div class="ticks" id="ticks"></div><div></div><div class="axtitle" id="axtitle"></div></div></div>
-<div id="tblwrap" hidden><table class="bt" id="bench_table"></table></div>
-<div class="tip" id="tip" role="tooltip" hidden></div>
-</section>
-<section class="card notes" id="notes"><h3 style="margin-top:0">How to read this</h3><ul id="notelist"></ul><h3>Sources</h3><ul id="srclist"></ul></section>
 </div>
 
 <header><h2 id="h1">Lap replay</h2>
@@ -159,6 +154,19 @@ All laps are the same car on the same track in the simulator, started on the lin
 "gap" = the seconds this lap needs less (-) or more (+) than the driver's run to reach the place where it is now (in a sector view: counted from the sector entry). "ahead" = metres in front of the driver's run at the same moment.</p>
 </div>
 </main>
+<div id="compare">
+<h2 class="sec" id="compare-h">Lap times against the older car and the real 2017 laps</h2>
+<div class="kpis" id="kpis"></div>
+<section class="card" id="benchcard" aria-labelledby="bt">
+<div class="cardhead"><div><h2 class="ctitle" id="bt"></h2><p class="csub" id="bsub"></p></div><button id="tblbtn" class="ghost" type="button" aria-pressed="false">Table view</button></div>
+<div class="legend" id="legend" role="list"></div>
+<div id="chartwrap"><div class="chart" id="chart"></div><div class="axis"><div></div><div class="ticks" id="ticks"></div><div></div><div class="axtitle" id="axtitle"></div></div></div>
+<div id="tblwrap" hidden><table class="bt" id="bench_table"></table></div>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+</section>
+<section class="card notes" id="notes"><h3 style="margin-top:0">How to read this</h3><ul id="notelist"></ul><h3>Sources</h3><ul id="srclist"></ul></section>
+</div>
+
 </div>
 <script>
 const DATA = __DATA__, T = DATA.track;
@@ -362,6 +370,8 @@ if (H.d){ $("drv").value = H.d; build(); } if (H.v){ $("view").value = H.v; setV
   document.title = DATA.pagetitle || document.title;
   $$("ptitle").textContent = DATA.pagetitle || "";
   $$("lede").textContent = DATA.lede || "";
+  const jump = mk("a", "", DATA.jump_text || "Jump to the lap times"); jump.href = "#compare-h"; jump.onclick = e => { e.preventDefault(); $$("compare-h").scrollIntoView({behavior: "smooth", block: "start"}); };
+  $$("lede").append(document.createTextNode(" "), jump);
   $$("bt").textContent = DATA.chart_title || "Lap times at Monza";
   $$("bsub").textContent = DATA.chart_sub || "";
   $$("axtitle").textContent = DATA.axis_title || "lap time, seconds (a shorter bar is a faster lap)";
