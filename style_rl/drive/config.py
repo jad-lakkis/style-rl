@@ -40,6 +40,17 @@ class RewardConfig:
     gamma: float = .992                  # also the shaping discount (it must be the learner's discount)
     penalty: float = 100.                # terminal failure
     shaping_k: float = 1.                # [1/m]
+    # Smoothness controls (generic, the same for every driver; 0 = off = the reward of runs a1 and a2). Per decision the reward loses
+    #   smooth_w * ( smooth_steer * |steering jerk|  +  smooth_straight * straightness * |steering|  +  smooth_pedal * (|throttle jerk| + |brake jerk|) )
+    # jerk = second difference of the executed command over three decisions (a(t) - 2 a(t-1) + a(t-2)): a steady ramp costs nothing, a flick or a chatter costs a lot; the pedals are the applied
+    # pedal values (0..1, after the dead zone), the steering is the action (+-1 = full lock). straightness = 1 where the reference line stays below straight_kappa for the next straight_ahead_m
+    # metres, falling to 0 where it reaches it (so a turn-in is never penalised). The first two decisions of an episode are not charged (the history comes from the scripted driver).
+    smooth_w: float = 0.
+    smooth_steer: float = 1.
+    smooth_straight: float = 0.5
+    smooth_pedal: float = 0.25
+    straight_kappa: float = 1. / 800.    # [1/m]; Monza's gentlest bend (Curva Grande) is about 1/430
+    straight_ahead_m: float = 80.
 
 
 @dataclass(frozen=True)

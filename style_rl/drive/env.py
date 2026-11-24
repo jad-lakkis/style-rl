@@ -67,6 +67,33 @@ class DrivingEnv(gym.Env):
         self.state = None
         self._prev_yaw = self._next_yaw = None
         self.s_ref = 0.0
+        self._a_prev2 = np.zeros(3, dtype=np.float32)          # the executed action two decisions back (smoothness controls)
+        self._k = 0                                            # decisions of the agent in this episode
+        self._straight, self._straight_ds = self._straightness_grid(course, cfg.reward)
+
+    @staticmethod
+    def _straightness_grid(course, rw):
+        """1 on the straights, 0 in the bends, on the track's station grid: 1 - (largest |curvature| of the centre line from 10 m behind to straight_ahead_m ahead) / straight_kappa, clipped to 0..1."""
+        tr = course.track
+        k = np.abs(np.asarray(tr.kappa, float))
+        na, nb = max(int(round(rw.straight_ahead_m / tr.ds)), 0), max(int(round(10.0 / tr.ds)), 0)
+        m = np.zeros(len(k))
+        for j in range(-nb, na + 1):
+            m = np.maximum(m, np.roll(k, -j))                 # m[i] covers k[i + j]
+        return np.clip(1.0 - m / rw.straight_kappa, 0.0, 1.0), float(tr.ds)
+
+    def smoothness_penalty(self, executed, prev1, prev2):
+        """The reward lost by this decision to the smoothness controls (config.RewardConfig): jerk of the steering and of the two pedals, and steering away from straight on a straight."""
+        rw = self.cfg.reward
+        if rw.smooth_w <= 0.0:
+            return 0.0
+        jerk_s = jerk_p = 0.0
+        if self._k >= 2:
+            jerk_s = abs(float(executed[0]) - 2.0 * float(prev1[0]) + float(prev2[0]))
+            for i in (1, 2):
+                jerk_p += abs(self._pedal(executed[i]) - 2.0 * self._pedal(prev1[i]) + self._pedal(prev2[i]))
+        sg = float(self._straight[int(self.s / self._straight_ds) % len(self._straight)])
+        return float(rw.smooth_w * (rw.smooth_steer * jerk_s + rw.smooth_straight * sg * abs(float(executed[0])) + rw.smooth_pedal * jerk_p))
 
     # --- controls ----------------------------------------------------------------------------------
     def set_blend(self, teacher_weight, fraction=None):
@@ -208,6 +235,7 @@ class DrivingEnv(gym.Env):
         self.t0 = self.state["time_s"]
         self.t, self._dist, self._stall_s, self.done = 0.0, 0.0, 0.0, False
         self._pending = self.last_action.copy()
+        self._a_prev2, self._k = self.last_action.copy(), 0
         self._phi = -self.cfg.reward.shaping_k * abs(self.e)
         self.max_time_s = self.cfg.eval_max_s if self.evaluation else self.cfg.max_episode_s
         L = self.course.L
@@ -234,6 +262,7 @@ class DrivingEnv(gym.Env):
             a_t = self.demo.act(self.state, self.s, self.demo.lap_target(self.s, self.teacher_f, self.state["speed"]))
             executed = ((1.0 - self.teacher_w) * action + self.teacher_w * a_t).astype(np.float32)
         prev_s, d0, t0 = self.s, self._dist, self.t
+        a_prev1, a_prev2 = self.last_action, self._a_prev2
         applied = executed
         if self.dr["action_delay"]:                       # the action reaches the car one decision late
             applied, self._pending = self._pending, executed
@@ -258,7 +287,8 @@ class DrivingEnv(gym.Env):
                     truncated, trunc_cause = True, "stall"
                 elif abs(self.heading_err) > cfg.wrong_way_rad:
                     cause = "wrong_way"
-        self.last_action = executed
+        pen = 0.0 if cause == "nonfinite" else self.smoothness_penalty(executed, a_prev1, a_prev2)
+        self.last_action, self._a_prev2, self._k = executed, a_prev1, self._k + 1
         if self.evaluation and cause != "nonfinite":
             j = len(self._crossings)
             if j < len(self._lines) and d0 < self._lines[j] <= self._dist:
@@ -267,7 +297,7 @@ class DrivingEnv(gym.Env):
             if cause is None and len(self._crossings) == len(self._lines):
                 cause = "lap_complete"
                 terminated = True
-        r = rw.a * ds - rw.b * dt
+        r = rw.a * ds - rw.b * dt - pen
         if cause in TERMINAL:
             terminated = True
             r -= rw.penalty
@@ -280,7 +310,7 @@ class DrivingEnv(gym.Env):
         obs = np.zeros(OBS_DIM, np.float32) if cause == "nonfinite" else self._observation()
         info = {"progress_m": self._dist, "time_s": self.t, "termination": cause if terminated else None, "truncation": trunc_cause,
                 "e_ref": self.e if cause != "nonfinite" else math.nan, "heading_error": self.heading_err if cause != "nonfinite" else math.nan, "speed": st["speed"],
-                "station_m": self.s, "executed_action": executed}
+                "station_m": self.s, "executed_action": executed, "smooth_pen": pen}
         if self.evaluation:
             c = self._crossings
             info["lap_times_s"] = [c[i + 1] - c[i] for i in range(len(c) - 1)]

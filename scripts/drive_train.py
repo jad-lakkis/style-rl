@@ -33,6 +33,11 @@ def main():
     ap.add_argument("--reliability-starts", type=int, default=None, help="after a clean deterministic flying lap, this many more from other start stations; best_gated.zip = the fastest checkpoint that finished all of them")
     ap.add_argument("--focus-prob", type=float, default=None, help="share of the training episodes that start 150-600 m before the places where training episodes ended in a failure (0 = off)")
     ap.add_argument("--train-inset-m", type=float, default=None, help="training only: the track counts this much narrower on both sides for the off-track test (a safety buffer); evaluation uses the true edges")
+    ap.add_argument("--smooth", type=float, default=None, help="weight of the smoothness controls in the reward (0 = off = runs a1, a2): steering jerk, steering away from straight on the straights, pedal jerk; "
+                    "see config.RewardConfig. About 0.1 / 0.4 / 1.6 cost 1 / 5 / 20 % of the reward per decision at the steering chatter of run a2")
+    ap.add_argument("--smooth-steer", type=float, default=None, help="relative weight of the steering jerk (default 1.0)")
+    ap.add_argument("--smooth-straight", type=float, default=None, help="relative weight of the steering away from straight on the straights (default 0.5)")
+    ap.add_argument("--smooth-pedal", type=float, default=None, help="relative weight of the pedal jerk (default 0.25)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-envs", type=int, default=4)
     ap.add_argument("--gradient-steps", type=int, default=None, help="per vector step; default n_envs / 2 (updates per environment step 0.5)")
@@ -64,6 +69,9 @@ def main():
         env = replace(env, train_inset_m=a.train_inset_m)
     if a.ref_line:
         env = replace(env, ref_line=str(Path(a.ref_line).resolve()))
+    sm = {k: v for k, v in (("smooth_w", a.smooth), ("smooth_steer", a.smooth_steer), ("smooth_straight", a.smooth_straight), ("smooth_pedal", a.smooth_pedal)) if v is not None}
+    if sm:
+        env = replace(env, reward=replace(env.reward, **sm))
     cfg = TrainConfig(out=a.out, track_csv=a.track, tracks=tracks, envelope_json=a.envelope or str(ROOT / preset.envelope), backend=a.backend or preset.backend, seed=a.seed, n_envs=a.n_envs,
                       gradient_steps=a.gradient_steps or max(a.n_envs // 2, 1), device=a.device, torch_threads=a.torch_threads, total_steps=a.steps, buffer_size=a.buffer_size, max_hours=a.max_hours,
                       eval_interval=a.eval_interval, eval_stochastic_laps=a.eval_stochastic, demo_dir=a.demo_dir,

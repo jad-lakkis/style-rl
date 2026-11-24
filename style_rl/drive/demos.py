@@ -127,7 +127,10 @@ def dataset_key(cfg, env_args):
     from .vec import as_tracks
     tracks, envelope_json, backend, env_cfg = as_tracks(env_args[0]), env_args[1], env_args[2], env_args[3]
     h = hashlib.sha256()
-    h.update(json.dumps({"demo": {k: v for k, v in asdict(cfg).items() if k != "workers"}, "env": asdict(env_cfg), "backend": backend}, sort_keys=True, default=str).encode())
+    env_d = asdict(env_cfg)
+    for k in [k for k in env_d["reward"] if k.startswith(("smooth_", "straight_"))]:
+        env_d["reward"].pop(k)              # the smoothness controls do not change the scripted driver: a run with them reuses the demonstrations of a run without (same key as before they existed)
+    h.update(json.dumps({"demo": {k: v for k, v in asdict(cfg).items() if k != "workers"}, "env": env_d, "backend": backend}, sort_keys=True, default=str).encode())
     for p in (*tracks, envelope_json):
         h.update(Path(p).read_bytes())
     return h.hexdigest()

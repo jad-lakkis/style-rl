@@ -24,7 +24,7 @@ from . import agent as ag
 from .bc import train_bc
 from .config import EnvConfig
 from .demos import DemoConfig, ensure_demos, prefill_replay_buffer
-from .evaluate import flying_lap, make_probe_starts, probe, reliability
+from .evaluate import flying_lap, make_probe_starts, probe, reliability, smoothness
 from .vec import DEFAULT_START_METHOD, build_vec_env, make_env
 
 
@@ -218,6 +218,8 @@ class EvalCallback(BaseCallback):
                "det_lap2_s": det.lap2_s, "sto_clean": len(clean_sto), "sto_laps": len(sto), "sto_lap2_mean_s": float(np.mean([r.lap2_s for r in clean_sto])) if clean_sto else None,
                "tracks": {k: {"clean": d.clean, "lap2_s": d.lap2_s, "end": d.termination} for k, d in dets.items()}, "score": None if score == float("inf") else score,
                "alpha": self.model.alpha, "eval_wall_s": round(time.time() - t, 1)}
+        if det.trace:
+            rec["smooth"] = smoothness(det.trace, self.eval_envs[names[0]])
         if rel is not None:
             rec["reliability"] = {k: {"clean": r["clean"], "of": r["of"], "lap2_s": r["lap2_s"], "ends": r["ends"]} for k, r in rel.items()}
             rec["gated"] = gated

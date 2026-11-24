@@ -48,6 +48,22 @@ def flying_lap(model, env, *, deterministic, seed=0, trace=False, start_s=None, 
     return LapReport(clean, times, str(info["termination"]), str(info["truncation"]), n, {k: np.asarray(v) for k, v in rec.items()})
 
 
+def smoothness(trace, env):
+    """How busy the hands and feet are on a test lap (the whole evaluation trace: run-in and both timed laps), per decision of 0.04 s: steering change (mean |a(t) - a(t-1)|, in units of full lock),
+    steering jerk (mean |second difference|), the same two on the straights only (straightness > 0.5), mean |steering| on the straights, pedal jerk (throttle + brake pedal) and the share of time
+    with both pedals above 0.2. A calm driver is below 0.01 on the steering change; run a2's best lap had 0.15 (0.26 steering jerk)."""
+    e = env.unwrapped
+    st, th, br, s = (np.asarray(trace[k], float) for k in ("steer", "throttle", "brake", "station_m"))
+    if len(st) < 4:
+        return None
+    d1, d2 = np.abs(np.diff(st)), np.abs(np.diff(st, 2))
+    straight = e._straight[(s[1:-1] / e._straight_ds).astype(int) % len(e._straight)] > 0.5
+    pick = lambda a, m: float(a[m].mean()) if m.any() else None
+    return {"steer_change": float(d1.mean()), "steer_jerk": float(d2.mean()), "steer_change_straight": pick(d1[:-1], straight[: len(d1) - 1]), "steer_jerk_straight": pick(d2, straight),
+            "steer_abs_straight": pick(np.abs(st[1:-1]), straight), "pedal_jerk": float(np.abs(np.diff(th, 2)).mean() + np.abs(np.diff(br, 2)).mean()),
+            "both_pedals": float((np.minimum(th, br) > 0.2).mean())}
+
+
 def varied_starts(length_m, n, offset_fraction=0.5):
     """n start stations spread evenly around the lap, the first at `offset_fraction` of a spacing (never at the line itself, which the standard evaluation start is near)."""
     return [((k + offset_fraction) * length_m / n) % length_m for k in range(n)]
